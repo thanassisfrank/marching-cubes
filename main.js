@@ -53,7 +53,7 @@ function main() {
     const data = generateData(15, 15, 15, (i, j, k) => Math.cos(Math.sqrt(Math.pow(i, 2) + Math.pow(j, 2) + Math.pow(k, 2))/4) + 1);
     //const data = generateData(15, 15, 15, (i, j, k) => Math.sqrt(Math.pow(i-7, 2) + Math.pow(j-7, 2) + Math.pow(k-7, 2))/5);
     //const data = generateData(2, 2, 2, (i, j, k) => Math.random());
-    //const data = generateData(4, 2, 2, (i, j, k) => i);
+    //const data = generateData(4, 4, 4, (i, j, k) => i + j + k);
 
     
     var threshold = parseFloat(get("thresholdInput").value);

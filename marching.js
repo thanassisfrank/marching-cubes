@@ -570,18 +570,22 @@ var generateMesh = (data, threshold) => {
             for (let k = 0; k < data[i][j].length-1; k++) {
                 const otherVertLength = verts.length;
 
+                let cellVals = [[[],[]],[[],[]]];
+
                 // generate code for the cell
                 var code = 0;
                 for (let l = 0; l < 8; l++) {
                     const c = vertCoordTable[l];
-                    code |= (data[i + c[0]][j + c[1]][k + c[2]] > threshold) << l;
+                    const val = data[i + c[0]][j + c[1]][k + c[2]];
+                    code |= (val > threshold) << l;
+                    cellVals[c[0]][c[1]][c[2]] = val;
                 }
 
                 // gets appropriate active edges
                 let edges = edgeTable[code];
 
                 //turns edge list into coords
-                const theseVerts = edgesToCoords(edges, [i, j, k], [1, 1, 1])
+                const theseVerts = edgesToCoords(edges, [i, j, k], [1, 1, 1], cellVals, threshold);
                 
 
                 //create entries for indicies list
@@ -609,20 +613,25 @@ var interpolateCoord = (a, b, fac) => {
 
 // cellCoord is coord of 0 vertex in cell
 // preserves order
-var edgesToCoords = (edges, cellCoord, cellDims) => {
+var edgesToCoords = (edges, cellCoord, cellDims, cellVals, threshold) => {
     let coords = [];
     // loop through each edge
-    for (let i = 0; i < edges.length; i++) {  
+    for (let i = 0; i < edges.length; i++) { 
+
         // get verts associated with it
         let verts = edgeToVertsTable[edges[i]]
-        // get coords of that vert
-        let a = vertCoordTable[verts[0]];
+        // get coords of that vert in index space
+        let a = vertCoordTable[verts[0]]; 
         let b = vertCoordTable[verts[1]];
+
         // get interpolation factor
-        // v1 = 
+        // get values at connected vertices
+        const va = cellVals[a[0]][a[1]][a[2]];
+        const vb = cellVals[b[0]][b[1]][b[2]] 
+        const fac = (threshold-va)/(vb-va);
         // pass into interpolate coords
         // add to coords list
-        coords.push(VecMath.vecAdd(VecMath.vecMult(interpolateCoord(a, b, 0.5), cellDims), cellCoord));
+        coords.push(VecMath.vecAdd(VecMath.vecMult(interpolateCoord(a, b, fac), cellDims), cellCoord));
     }
     return coords;
 }
