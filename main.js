@@ -1,5 +1,9 @@
 // main.js
 
+import {get} from "./utils.js";
+import {generateMesh} from "./marching.js";
+import {setupRenderer, renderFrame} from "./canvasRender.js";
+
 document.body.onload = main;
 
 var generateData = (x, y, z, f) => {

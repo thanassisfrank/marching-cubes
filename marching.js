@@ -1,6 +1,9 @@
 // marching.js
 // implements the marching cubes algorithm
 
+import {VecMath} from "./VecMath.js";
+export {generateMesh};
+
 // vertex and edge convention used:
 //                 7-------6          x---6---x
 //                /|      /|     11  7|      5|  10
@@ -631,10 +634,9 @@ var edgesToFactors = (edges, cellVals, threshold) => {
 }
 
 // interpolates between 2 coords
-// WILL DO: add linear interpolation based on value
 var interpolateCoord = (a, b, fac) => {
     let final = []
-    for (i = 0; i < a.length; i++) {
+    for (let i = 0; i < a.length; i++) {
         final[i] = (a[i]*(1-fac) + b[i]*(fac))
     }
     return final;

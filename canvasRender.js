@@ -1,5 +1,10 @@
 // canvasRender.js
 // implements a basic 3d engine using the canvas2d api
+
+import {getCtx} from "./utils.js";
+import {VecMath} from "./VecMath.js";
+export {setupRenderer, renderFrame};
+
 const worldScale = 20;
 const camZ = 20;
 

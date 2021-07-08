@@ -1,5 +1,8 @@
 //VecMath.js
 
+import {sin30, cos30, toRads} from "./utils.js";
+export {VecMath};
+
 const VecMath = {
 	
 	// All of these functions expect vectors of three dimensions and

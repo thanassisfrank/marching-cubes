@@ -1,5 +1,7 @@
 // utils.js
 
+export {get, getCtx, sin30, cos30, toRads};
+
 var get = (id) => {
     return document.getElementById(id)
 }
