@@ -1,5 +1,15 @@
+// canvasRender.js
+// implements a basic 3d engine using the canvas2d api
 const worldScale = 20;
 const camZ = 20;
+
+// setup function called by main
+var setupRenderer = (canvas) => {
+    var ctx = getCtx(canvas, "2d");
+    ctx.width = canvas.width;
+    ctx.height = canvas.height;
+    return ctx;
+}
 
 var projPoint = (mat, pos, scale, off, worldOff, mirrorAxes) => {
     const worldPos = VecMath.vecAdd(pos, worldOff || [0, 0, 0]);

@@ -2,8 +2,6 @@
 
 document.body.onload = main;
 
-var verts = []
-
 var generateData = (x, y, z, f) => {
     var data = [];
     for (let i = 0; i < x; i++) {
@@ -20,10 +18,6 @@ var generateData = (x, y, z, f) => {
 
 function main() {
     var canvas = get("c");
-    var ctx = getCtx(canvas, "2d");
-    ctx.width = canvas.width;
-    ctx.height = canvas.height;
-
     var angle = 90;
     var startAngle = 0;
 
@@ -58,18 +52,25 @@ function main() {
     
     var threshold = parseFloat(get("thresholdInput").value);
     var mesh = generateMesh(data, threshold);
-    console.log(mesh)
+    //console.log(mesh)
     
     get("thresholdInput").oninput = function() {
         threshold = parseFloat(this.value);
         mesh = generateMesh(data, threshold);
     }
+
+    //setup the renderer; returns the rendering context object
+    var ctx = setupRenderer(canvas);
+
+    if (!ctx) {
+        return;
+    }
+
     var params = {
         w: ctx.width,
         h: ctx.height,
         data: data,
     }
-
 
     var renderLoop = () => {
         renderFrame(ctx, mesh, angle, scale, threshold, params)
