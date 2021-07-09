@@ -80,13 +80,6 @@ function main() {
     }
 
     var ctx = setupRenderer(canvas);
-
-    var scale = parseFloat(get("scaleInput").value);
-    
-    get("scaleInput").oninput = function() {
-        scale = parseFloat(this.value);
-    }
-
     
     var threshold = parseFloat(get("thresholdInput").value);
     var mesh = generateMesh(data, threshold);
@@ -99,8 +92,19 @@ function main() {
         updateRendererState(ctx, mesh);
     }
 
-    document.onkeypress = function(e) {
-        if (e.code == "Space") console.log(get("thresholdInput").value);
+    document.body.onkeypress = function(e) {
+        if (e.code == "Space") {
+            //test the speed of mesh generation
+            console.log("test start")
+            const amount = 1000;
+            const start = Date.now();
+            let mesh;
+            for (let i = 0; i < amount; i++) {
+                mesh = generateMesh(data, threshold);
+            }
+            const dt = Date.now()-start;
+            console.log("Speed for " + String(mesh.verts.length) + " verts: " + String(Math.round(amount*1000/dt)) + "/s")
+        }
     }
 
     const modelMat = mat4.create();
