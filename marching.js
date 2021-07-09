@@ -586,7 +586,7 @@ var generateMesh = function(dataObj, threshold) {
                 var code = 0;
                 for (let l = 0; l < 8; l++) {
                     const c = vertCoordTable[l];
-                    const val = dataObj.data[i + c[0]][j + c[1]][k + c[2]];
+                    const val = dataObj.index(i + c[0], j + c[1], k + c[2]);
                     code |= (val > threshold) << l;
                     cellVals[c[0] + 2*c[1] + 4*c[2]] = val;
                 }
@@ -605,8 +605,8 @@ var generateMesh = function(dataObj, threshold) {
                 const theseIndices = tri.map(a => a + otherVertLength);
 
                 //calculate normal vector for each vertex
-                const theseNormals = getVertexNormals(edges, [i, j, k], dataObj.normals, factors);
-                //const theseNormals = getVertexNormalsFlat(theseVerts, tri);
+                //const theseNormals = getVertexNormals(edges, [i, j, k], dataObj.normals, factors);
+                const theseNormals = getVertexNormalsFlat(theseVerts, tri);
 
                 verts.push(...theseVerts);
                 indices.push(...theseIndices);
@@ -663,20 +663,19 @@ var edgesToCoords = (edges, cellCoord, cellDims, factors) => {
 }
 
 var generateDataNormals = function(dataObj) {
-    const data = dataObj.data;
     let normals = dataObj.normals;
     for (let i = 0; i < dataObj.size[0]; i++) {
         normals.push([]);
         for (let j = 0; j < dataObj.size[1]; j++) {
             normals[i].push([]);
             for (let k = 0; k < dataObj.size[2]; k++) {
-                normals[i][j].push(getDataPointNormal(data, [i, j, k], dataObj.size, dataObj.cellSize));
+                normals[i][j].push(getDataPointNormal(dataObj, [i, j, k], dataObj.size, dataObj.cellSize));
             }
         }
     }
 }
 
-function getDataPointNormal(data, coord, size, cellSize) {
+function getDataPointNormal(dataObj, coord, size, cellSize) {
     const i = coord[0];
     const j = coord[1];
     const k = coord[2];
@@ -684,32 +683,32 @@ function getDataPointNormal(data, coord, size, cellSize) {
     // x(i) component
     if (i > 0) {
         if (i < size[0] - 2){
-            dx = (data[i+1][j][k] - data[i-1][j][k])/(2*cellSize[0])
+            dx = (dataObj.index(i+1, j, k) - dataObj.index(i-1, j, k))/(2*cellSize[0])
         } else {
-            dx = (data[i][j][k] - data[i-1][j][k])/cellSize[0]
+            dx = (dataObj.index(i, j, k) - dataObj.index(i-1, j, k))/cellSize[0]
         }
     } else {
-        dx = ((data[i+1][j][k] - data[i][j][k])/(cellSize[0]))
+        dx = ((dataObj.index(i+1, j, k) - dataObj.index(i, j, k))/(cellSize[0]))
     }
     // y(j) component
     if (j > 0) {
         if (j < size[1] - 2){
-            dy = (data[i][j+1][k] - data[i][j-1][k])/(2*cellSize[1])
+            dy = (dataObj.index(i, j+1, k) - dataObj.index(i, j-1, k))/(2*cellSize[1])
         } else {
-            dy = (data[i][j][k] - data[i][j-1][k])/cellSize[1]
+            dy = (dataObj.index(i, j, k) - dataObj.index(i, j-1, k))/cellSize[1]
         }
     } else {
-        dy = ((data[i][j+1][k] - data[i][j][k])/(cellSize[1]))
+        dy = ((dataObj.index(i, j+1, k) - dataObj.index(i, j, k))/(cellSize[1]))
     }
     // z(k) component
     if (k > 0) {
         if (k < size[2] - 2){
-            dz = (data[i][j][k+1] - data[i][j][k-1])/(2*cellSize[2])
+            dz = (dataObj.index(i, j, k+1) - dataObj.index(i, j, k-1))/(2*cellSize[2])
         } else {
-            dz = (data[i][j][k] - data[i][j][k-1])/cellSize[2]
+            dz = (dataObj.index(i, j, k) - dataObj.index(i, j, k-1))/cellSize[2]
         }
     } else {
-        dz = ((data[i][j][k+1] - data[i][j][k])/(cellSize[2]))
+        dz = ((dataObj.index(i, j, k+1) - dataObj.index(i, j, k))/(cellSize[2]))
     }
     //console.log(VecMath.normalise([dx, dy, dz]));
     return VecMath.normalise([dx, dy, dz]);
