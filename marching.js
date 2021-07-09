@@ -606,7 +606,7 @@ var generateMesh = function(dataObj, threshold) {
                 const theseIndices = tri.map(a => a + otherVertLength);
 
                 //calculate normal vector for each vertex
-                //const theseNormals = getVertexNormals(edges, [i, j, k], dataObj.normals, factors);
+                //const theseNormals = getVertexNormals(edges, [i, j, k], dataObj, factors);
                 const theseNormals = getVertexNormalsFlat(theseVerts, tri, [i, j, k]);
 
                 verts.push(...theseVerts);
@@ -664,13 +664,11 @@ var edgesToCoords = (edges, cellCoord, cellDims, factors) => {
 }
 
 var generateDataNormals = function(dataObj) {
-    let normals = dataObj.normals;
+    dataObj.normals = new Float32Array(dataObj.size[0] * dataObj.size[1] * dataObj.size[2] * 3);
     for (let i = 0; i < dataObj.size[0]; i++) {
-        normals.push([]);
         for (let j = 0; j < dataObj.size[1]; j++) {
-            normals[i].push([]);
             for (let k = 0; k < dataObj.size[2]; k++) {
-                normals[i][j].push(getDataPointNormal(dataObj, [i, j, k], dataObj.size, dataObj.cellSize));
+                dataObj.setNormal(i, j, k, getDataPointNormal(dataObj, [i, j, k], dataObj.size, dataObj.cellSize));
             }
         }
     }
@@ -715,7 +713,7 @@ function getDataPointNormal(dataObj, coord, size, cellSize) {
     return VecMath.normalise([dx, dy, dz]);
 }
 
-function getVertexNormals(edges, coord, dataNorms, factors) {
+function getVertexNormals(edges, coord, dataObj, factors) {
     let normals = [];
     // loop through each edge
     for (let i = 0; i < edges.length; i++) { 
@@ -725,8 +723,8 @@ function getVertexNormals(edges, coord, dataNorms, factors) {
         const a = vertCoordTable[verts[0]]; 
         const b = vertCoordTable[verts[1]];
         // get normals at connected verts
-        const na = dataNorms[coord[0] + a[0]][coord[1] + a[1]][coord[2] + a[2]];
-        const nb = dataNorms[coord[0] + b[0]][coord[1] + b[1]][coord[2] + b[2]];
+        const na = dataObj.indexNormals(coord[0] + a[0], coord[1] + a[1], coord[2] + a[2]);
+        const nb = dataObj.indexNormals(coord[0] + b[0], coord[1] + b[1], coord[2] + b[2]);
         // pass into interpolate coords and add to list
         normals.push(...interpolateCoord(na, nb, factors[i]));
     }
