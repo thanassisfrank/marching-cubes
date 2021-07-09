@@ -26,9 +26,9 @@ const VecMath = {
 		return [vec[0]*vec1[0], vec[1]*vec1[1], vec[2]*vec1[2]]
 	},
 	scalMult: function(scal, vec) {
-		var newX = vec[0] * scal;
-		var newY = vec[1] * scal;
-		var newZ = vec[2] * scal;
+		const newX = vec[0] * scal;
+		const newY = vec[1] * scal;
+		const newZ = vec[2] * scal;
 		
 		return [newX, newY, newZ];
 	},
@@ -39,8 +39,15 @@ const VecMath = {
 		
 		return [newX, newY, newZ];
 	},
-	dotProduct: function(vec, vec1) {
+	dot: function(vec, vec1) {
 		return vec[0] * vec1[0] + vec[1] * vec1[1] + vec[2] * vec1[2];
+	},
+	cross: function(vec1, vec2) {
+		const newX = vec1[1]*vec2[2] - vec1[2]*vec2[1];
+		const newY = vec1[2]*vec2[0] - vec1[0]*vec2[2];
+		const newZ = vec1[0]*vec2[1] - vec1[1]*vec2[0];
+		
+		return [newX, newY, newZ];
 	},
 	translate: function(vec, matrix) {
 		var newMatrix = matrix;
@@ -93,6 +100,6 @@ const VecMath = {
 		return Math.sqrt(Math.pow(vec[0], 2) + Math.pow(vec[1], 2) + Math.pow(vec[2], 2));
 	},
 	normalise: function(vec) {
-		return this.scalMult(1/this.magnitude(vec), vec)
+		return this.scalMult(1/this.magnitude(vec) || 0, vec)
 	}
 };

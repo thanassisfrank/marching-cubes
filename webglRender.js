@@ -37,6 +37,7 @@ const fsSource = `
 
     void main() {
         float light = dot(-normal, light);
+        light *= 1.0;//sign(light);
         gl_FragColor = vec4(color*light, 1.0);
     }
 `;

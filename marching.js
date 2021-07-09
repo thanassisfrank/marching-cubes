@@ -2,6 +2,7 @@
 // implements the marching cubes algorithm
 
 import {VecMath} from "./VecMath.js";
+import {vec3} from "https://cdn.skypack.dev/gl-matrix";
 export {generateMesh, generateDataNormals};
 
 // vertex and edge convention used:
@@ -604,7 +605,8 @@ var generateMesh = function(dataObj, threshold) {
                 const theseIndices = tri.map(a => a + otherVertLength);
 
                 //calculate normal vector for each vertex
-                const theseNormals = getVertexNormals(edges, [i, j, k], dataObj.normals, factors)
+                const theseNormals = getVertexNormals(edges, [i, j, k], dataObj.normals, factors);
+                //const theseNormals = getVertexNormalsFlat(theseVerts, tri);
 
                 verts.push(...theseVerts);
                 indices.push(...theseIndices);
@@ -717,7 +719,6 @@ function getVertexNormals(edges, coord, dataNorms, factors) {
     let normals = [];
     // loop through each edge
     for (let i = 0; i < edges.length; i++) { 
-
         // get verts associated with it
         const verts = edgeToVertsTable[edges[i]]
         // get coords of that vert in index space
@@ -728,6 +729,40 @@ function getVertexNormals(edges, coord, dataNorms, factors) {
         const nb = dataNorms[coord[0] + b[0]][coord[1] + b[1]][coord[2] + b[2]];
         // pass into interpolate coords and add to list
         normals.push(...interpolateCoord(na, nb, factors[i]));
+    }
+    return normals;
+}
+
+function getVertexNormalsFlat(verts, indices) {
+    let normals = new Float32Array(verts.length);
+    for (let i = 0; i < indices.length; i += 3) {
+        const i0 = 3*indices[i];
+        const i1 = 3*indices[i+1];
+        const i2 = 3*indices[i+2]
+        const v0 = [verts[i0], verts[i0 + 1], verts[i0 + 2]];
+        const v1 = [verts[i1], verts[i1 + 1], verts[i1 + 2]];
+        const v2 = [verts[i2], verts[i2 + 1], verts[i2 + 2]];
+
+        let a = vec3.create();
+        let b = vec3.create();
+        vec3.sub(a, v1, v0);
+        vec3.sub(b, v2, v0);
+
+        let n = vec3.create();
+        vec3.cross(n, a, b)
+        vec3.normalize(n, n);
+
+        //if(!n[0]) console.log(a, b);
+        //console.log(v0)
+        normals[i0] = n[0];
+        normals[i0+1] = n[1];
+        normals[i0+2] = n[2];
+        normals[i1] = n[0];
+        normals[i1+1] = n[1];
+        normals[i1+2] = n[2];
+        normals[i2] = n[0];
+        normals[i2+1] = n[1];
+        normals[i2+2] = n[2];
     }
     return normals;
 }
