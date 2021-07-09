@@ -564,7 +564,7 @@ const triTable = [
 
 // takes data object as a 3d array and returns list of vertices (1d float32) and indices (1d uint16) for the mesh
 // at the supplied threshold value
-var generateMesh = function(data, threshold) {
+var generateMesh = function(dataObj, threshold) {
     //const start = Date.now();
     let verts = [];
     let indices = [];
@@ -572,9 +572,9 @@ var generateMesh = function(data, threshold) {
 
     //loop through every cell
 
-    for (let i = 0; i < data.size[0] - 1; i++) {
-        for (let j = 0; j < data.size[1] - 1; j++) {
-            for (let k = 0; k < data.size[2] - 1; k++) {
+    for (let i = 0; i < dataObj.size[0] - 1; i++) {
+        for (let j = 0; j < dataObj.size[1] - 1; j++) {
+            for (let k = 0; k < dataObj.size[2] - 1; k++) {
                 const otherVertLength = verts.length/3;
 
                 // values for cell data points are stored as 1d array
@@ -585,7 +585,7 @@ var generateMesh = function(data, threshold) {
                 var code = 0;
                 for (let l = 0; l < 8; l++) {
                     const c = vertCoordTable[l];
-                    const val = data.data[i + c[0]][j + c[1]][k + c[2]];
+                    const val = dataObj.data[i + c[0]][j + c[1]][k + c[2]];
                     code |= (val > threshold) << l;
                     cellVals[c[0] + 2*c[1] + 4*c[2]] = val;
                 }
@@ -597,19 +597,18 @@ var generateMesh = function(data, threshold) {
                 const factors = edgesToFactors(edges, cellVals, threshold);
 
                 //turns edge list into coords
-                const theseVerts = edgesToCoords(edges, [i, j, k], [1, 1, 1], factors);
+                const theseVerts = edgesToCoords(edges, [i, j, k], dataObj.cellSize, factors);
                 
                 //create entries for indicies list
                 const tri = triTable[code];
-                let theseIndices = tri.map(a => a + otherVertLength);
+                const theseIndices = tri.map(a => a + otherVertLength);
 
                 //calculate normal vector for each vertex
-
-                //let theseNormals = getVertNormals(dataNormals, edges, factors);
+                const theseNormals = getVertexNormals(edges, [i, j, k], dataObj.normals, factors)
 
                 verts.push(...theseVerts);
                 indices.push(...theseIndices);
-                //normals.push(...theseNormals);
+                normals.push(...theseNormals);
             }
         }
     }
@@ -661,19 +660,18 @@ var edgesToCoords = (edges, cellCoord, cellDims, factors) => {
     return coords;
 }
 
-var generateDataNormals = function(dataObj, cellSize) {
+var generateDataNormals = function(dataObj) {
     const data = dataObj.data;
-    let normals = [];
-    for (let i = 0; i < data.length; i++) {
+    let normals = dataObj.normals;
+    for (let i = 0; i < dataObj.size[0]; i++) {
         normals.push([]);
-        for (let j = 0; j < data[i].length; j++) {
+        for (let j = 0; j < dataObj.size[1]; j++) {
             normals[i].push([]);
-            for (let k = 0; k < data[i][j].length; k++) {
-                normals[i][j].push(getDataPointNormal(data, [i, j, k], cellSize));
+            for (let k = 0; k < dataObj.size[2]; k++) {
+                normals[i][j].push(getDataPointNormal(data, [i, j, k], dataObj.cellSize));
             }
         }
     }
-    return normals;
 }
 
 function getDataPointNormal(data, coord, cellSize) {
@@ -712,6 +710,25 @@ function getDataPointNormal(data, coord, cellSize) {
         dz = ((data[i][j][k+1] - data[i][j][k])/(2*cellSize[0]))
     }
     return VecMath.normalise([dx, dy, dz]);
+}
+
+function getVertexNormals(edges, coord, dataNorms, factors) {
+    let normals = [];
+    // loop through each edge
+    for (let i = 0; i < edges.length; i++) { 
+
+        // get verts associated with it
+        const verts = edgeToVertsTable[edges[i]]
+        // get coords of that vert in index space
+        const a = vertCoordTable[verts[0]]; 
+        const b = vertCoordTable[verts[1]];
+        // get normals at connected verts
+        const na = dataNorms[coord[0] + a[0]][coord[1] + a[1]][coord[2] + a[2]];
+        const nb = dataNorms[coord[0] + b[0]][coord[1] + b[1]][coord[2] + b[2]];
+        // pass into interpolate coords and add to list
+        normals.push(...interpolateCoord(na, nb, factors[i]));
+    }
+    return normals;
 }
 
 // for generating tables and checking values: -----------------------------------------------------------------------------------
