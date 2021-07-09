@@ -562,7 +562,7 @@ const triTable = [
     []
 ]
 
-// takes 3d data (val >= 0) as a 3d array and returns list of vertices (1d float32) and indices (1d uint16) for the mesh
+// takes data object as a 3d array and returns list of vertices (1d float32) and indices (1d uint16) for the mesh
 // at the supplied threshold value
 var generateMesh = function(data, threshold) {
     //const start = Date.now();
@@ -570,12 +570,11 @@ var generateMesh = function(data, threshold) {
     let indices = [];
     let normals = [];
 
-    let dataNormals = [];
     //loop through every cell
 
-    for (let i = 0; i < data.length-1; i++) {
-        for (let j = 0; j < data[i].length-1; j++) {
-            for (let k = 0; k < data[i][j].length-1; k++) {
+    for (let i = 0; i < data.size[0] - 1; i++) {
+        for (let j = 0; j < data.size[1] - 1; j++) {
+            for (let k = 0; k < data.size[2] - 1; k++) {
                 const otherVertLength = verts.length/3;
 
                 // values for cell data points are stored as 1d array
@@ -586,7 +585,7 @@ var generateMesh = function(data, threshold) {
                 var code = 0;
                 for (let l = 0; l < 8; l++) {
                     const c = vertCoordTable[l];
-                    const val = data[i + c[0]][j + c[1]][k + c[2]];
+                    const val = data.data[i + c[0]][j + c[1]][k + c[2]];
                     code |= (val > threshold) << l;
                     cellVals[c[0] + 2*c[1] + 4*c[2]] = val;
                 }
@@ -662,7 +661,8 @@ var edgesToCoords = (edges, cellCoord, cellDims, factors) => {
     return coords;
 }
 
-var generateDataNormals = function(data, cellSize) {
+var generateDataNormals = function(dataObj, cellSize) {
+    const data = dataObj.data;
     let normals = [];
     for (let i = 0; i < data.length; i++) {
         normals.push([]);

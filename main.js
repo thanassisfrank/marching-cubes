@@ -37,13 +37,11 @@ function main() {
     var data = new Data();
 
     // data.generateData(15, 15, 15, (i, j, k) => Math.cos(Math.sqrt(Math.pow(i, 2) + Math.pow(j, 2) + Math.pow(k, 2))/4) + 1);
-    // data.generateData(15, 15, 15, (i, j, k) => Math.sqrt(Math.pow(i-7, 2) + Math.pow(j-7, 2) + Math.pow(k-7, 2))/5);
+    data.generateData(15, 15, 15, (i, j, k) => Math.sqrt(Math.pow(i-7, 2) + Math.pow(j-7, 2) + Math.pow(k-7, 2))/5);
     // data.generateData(2, 2, 2, (i, j, k) => Math.random());
-    data.generateData(10, 10, 10, (i, j, k) => i);
+    // data.generateData(10, 10, 10, (i, j, k) => i);
 
-    data.normals = generateDataNormals(data.data, [1, 1, 1]);
-
-    //console.log(data.normals);
+    data.normals = generateDataNormals(data, [1, 1, 1]);
 
     var dist = 1.2*data.maxSize;
 
@@ -90,12 +88,12 @@ function main() {
 
     
     var threshold = parseFloat(get("thresholdInput").value);
-    var mesh = generateMesh(data.data, threshold);
+    var mesh = generateMesh(data, threshold);
     updateRendererState(ctx, mesh);
     
     get("thresholdInput").oninput = function() {
         threshold = parseFloat(this.value);
-        mesh = generateMesh(data.data, threshold);
+        mesh = generateMesh(data, threshold);
         updateRendererState(ctx, mesh);
     }
 
