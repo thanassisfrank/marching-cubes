@@ -576,6 +576,7 @@ var generateMesh = function(dataObj, threshold) {
     for (let i = 0; i < dataObj.size[0] - 1; i++) {
         for (let j = 0; j < dataObj.size[1] - 1; j++) {
             for (let k = 0; k < dataObj.size[2] - 1; k++) {
+                //if (i != 7 || j != 3 || k != 10) continue;
                 const otherVertLength = verts.length/3;
 
                 // values for cell data points are stored as 1d array
@@ -606,7 +607,7 @@ var generateMesh = function(dataObj, threshold) {
 
                 //calculate normal vector for each vertex
                 //const theseNormals = getVertexNormals(edges, [i, j, k], dataObj.normals, factors);
-                const theseNormals = getVertexNormalsFlat(theseVerts, tri);
+                const theseNormals = getVertexNormalsFlat(theseVerts, tri, [i, j, k]);
 
                 verts.push(...theseVerts);
                 indices.push(...theseIndices);
@@ -732,12 +733,12 @@ function getVertexNormals(edges, coord, dataNorms, factors) {
     return normals;
 }
 
-function getVertexNormalsFlat(verts, indices) {
+function getVertexNormalsFlat(verts, indices, cellCoord) {
     let normals = new Float32Array(verts.length);
     for (let i = 0; i < indices.length; i += 3) {
         const i0 = 3*indices[i];
         const i1 = 3*indices[i+1];
-        const i2 = 3*indices[i+2]
+        const i2 = 3*indices[i+2];
         const v0 = [verts[i0], verts[i0 + 1], verts[i0 + 2]];
         const v1 = [verts[i1], verts[i1 + 1], verts[i1 + 2]];
         const v2 = [verts[i2], verts[i2 + 1], verts[i2 + 2]];
@@ -749,19 +750,21 @@ function getVertexNormalsFlat(verts, indices) {
 
         let n = vec3.create();
         vec3.cross(n, a, b)
-        vec3.normalize(n, n);
 
-        //if(!n[0]) console.log(a, b);
-        //console.log(v0)
-        normals[i0] = n[0];
-        normals[i0+1] = n[1];
-        normals[i0+2] = n[2];
-        normals[i1] = n[0];
-        normals[i1+1] = n[1];
-        normals[i1+2] = n[2];
-        normals[i2] = n[0];
-        normals[i2+1] = n[1];
-        normals[i2+2] = n[2];
+        if(n[0] != 0 && n[1] != 0 && n[2] != 0) {
+            vec3.normalize(n, n);
+        
+            normals[i0] = n[0];
+            normals[i0+1] = n[1];
+            normals[i0+2] = n[2];
+            normals[i1] = n[0];
+            normals[i1+1] = n[1];
+            normals[i1+2] = n[2];
+            normals[i2] = n[0];
+            normals[i2+1] = n[1];
+            normals[i2+2] = n[2];
+
+        }
     }
     return normals;
 }

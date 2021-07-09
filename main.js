@@ -99,6 +99,10 @@ function main() {
         updateRendererState(ctx, mesh);
     }
 
+    document.onkeypress = function(e) {
+        if (e.code == "Space") console.log(get("thresholdInput").value);
+    }
+
     const modelMat = mat4.create();
     mat4.rotateX(modelMat, modelMat, toRads(-90));
     mat4.translate(modelMat, modelMat, VecMath.scalMult(-1, data.midPoint));
