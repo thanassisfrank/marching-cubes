@@ -91,5 +91,8 @@ const VecMath = {
 	},
 	magnitude: function(vec) {
 		return Math.sqrt(Math.pow(vec[0], 2) + Math.pow(vec[1], 2) + Math.pow(vec[2], 2));
+	},
+	normalise: function(vec) {
+		return this.scalMult(1/this.magnitude(vec), vec)
 	}
 };

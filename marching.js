@@ -2,7 +2,7 @@
 // implements the marching cubes algorithm
 
 import {VecMath} from "./VecMath.js";
-export {generateMesh};
+export {generateMesh, generateDataNormals};
 
 // vertex and edge convention used:
 //                 7-------6          x---6---x
@@ -606,6 +606,8 @@ var generateMesh = function(data, threshold) {
 
                 //calculate normal vector for each vertex
 
+                //let theseNormals = getVertNormals(dataNormals, edges, factors);
+
                 verts.push(...theseVerts);
                 indices.push(...theseIndices);
                 //normals.push(...theseNormals);
@@ -663,42 +665,53 @@ var edgesToCoords = (edges, cellCoord, cellDims, factors) => {
 var generateDataNormals = function(data, cellSize) {
     let normals = [];
     for (let i = 0; i < data.length; i++) {
+        normals.push([]);
         for (let j = 0; j < data[i].length; j++) {
+            normals[i].push([]);
             for (let k = 0; k < data[i][j].length; k++) {
-                let dx, dy, dz;
-                // x(i) component
-                if (i > 0) {
-                    if (i < data.length - 1){
-                        dx = (data[i+1][j][k] - data[i-1][j][k])/cellSize[0]
-                    } else {
-                        dx = (data[i+1][j][k] - data[i][j][k])/(2*cellSize[0])
-                    }
-                } else {
-                    dx = ((data[i][j][k] - data[i][j][k])/(2*cellSize[0]))
-                }
-                // y(j) component
-                if (i > 0) {
-                    if (i < data.length - 1){
-                        dy = (data[i+1][j][k] - data[i-1][j][k])/cellSize[0]
-                    } else {
-                        dy = (data[i+1][j][k] - data[i][j][k])/(2*cellSize[0])
-                    }
-                } else {
-                    dy = ((data[i][j][k] - data[i][j][k])/(2*cellSize[0]))
-                }
-                // z(k) component
-                if (i > 0) {
-                    if (i < data.length - 1){
-                        dz = (data[i+1][j][k] - data[i-1][j][k])/cellSize[0]
-                    } else {
-                        dz = (data[i+1][j][k] - data[i][j][k])/(2*cellSize[0])
-                    }
-                } else {
-                    dz = ((data[i][j][k] - data[i][j][k])/(2*cellSize[0]))
-                }
+                normals[i][j].push(getDataPointNormal(data, [i, j, k], cellSize));
             }
         }
     }
+    return normals;
+}
+
+function getDataPointNormal(data, coord, cellSize) {
+    const i = coord[0];
+    const j = coord[1];
+    const k = coord[2];
+    let dx, dy, dz;
+    // x(i) component
+    if (i > 0) {
+        if (i < data.length - 2){
+            dx = (data[i+1][j][k] - data[i-1][j][k])/cellSize[0]
+        } else {
+            dx = (data[i][j][k] - data[i-1][j][k])/(2*cellSize[0])
+        }
+    } else {
+        dx = ((data[i+1][j][k] - data[i][j][k])/(2*cellSize[0]))
+    }
+    // y(j) component
+    if (j > 0) {
+        if (j < data.length - 2){
+            dy = (data[i][j+1][k] - data[i][j-1][k])/cellSize[0]
+        } else {
+            dy = (data[i][j][k] - data[i][j-1][k])/(2*cellSize[0])
+        }
+    } else {
+        dy = ((data[i][j+1][k] - data[i][j][k])/(2*cellSize[0]))
+    }
+    // z(k) component
+    if (k > 0) {
+        if (k < data.length - 2){
+            dz = (data[i][j][k+1] - data[i][j][k-1])/cellSize[0]
+        } else {
+            dz = (data[i][j][k] - data[i][j][k-1])/(2*cellSize[0])
+        }
+    } else {
+        dz = ((data[i][j][k+1] - data[i][j][k])/(2*cellSize[0]))
+    }
+    return VecMath.normalise([dx, dy, dz]);
 }
 
 // for generating tables and checking values: -----------------------------------------------------------------------------------

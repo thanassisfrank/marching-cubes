@@ -2,7 +2,7 @@
 
 import {get, toRads} from "./utils.js";
 import {mat4} from 'https://cdn.skypack.dev/gl-matrix';
-import {generateMesh} from "./marching.js";
+import {generateMesh, generateDataNormals} from "./marching.js";
 import {setupRenderer, updateRendererState, renderFrame} from "./webglRender.js";
 
 document.body.onload = main;
@@ -46,9 +46,11 @@ function getProjMat(th, phi, dist) {
 
 function main() {
     //const data = generateData(15, 15, 15, (i, j, k) => Math.cos(Math.sqrt(Math.pow(i, 2) + Math.pow(j, 2) + Math.pow(k, 2))/4) + 1);
-    const data = generateData(15, 15, 15, (i, j, k) => Math.sqrt(Math.pow(i-7, 2) + Math.pow(j-7, 2) + Math.pow(k-7, 2))/5);
+    //const data = generateData(15, 15, 15, (i, j, k) => Math.sqrt(Math.pow(i-7, 2) + Math.pow(j-7, 2) + Math.pow(k-7, 2))/5);
     //const data = generateData(2, 2, 2, (i, j, k) => Math.random());
-    //const data = generateData(10, 10, 10, (i, j, k) => j+k);
+    const data = generateData(10, 10, 10, (i, j, k) => i);
+
+    console.log(generateDataNormals(data, [1, 1, 1]));
 
     const dataSize = Math.max(data.length, data[0].length, data[0][0].length)
     var dist = 1.2*dataSize;
@@ -82,7 +84,7 @@ function main() {
     };
     canvas.onwheel = function(e) {
         e.preventDefault();
-        dist = Math.max(0, dist + (e.deltaY*dataSize)/1000);
+        dist = Math.max(dataSize/100, dist + (e.deltaY*dataSize)/1000);
         projMat = getProjMat(th, phi, dist);
     }
 
