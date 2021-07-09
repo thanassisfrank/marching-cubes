@@ -14,25 +14,30 @@ var programInfo;
 
 const vsSource = `
     attribute vec4 aVertexPosition;
+    attribute vec3 vertNormal;
 
     uniform mat4 uModelViewMatrix;
     uniform mat4 uProjectionMatrix;
 
-    varying vec3 color;
+    varying vec3 normal;
 
     void main() {
         gl_Position = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
-        color = vec3(aVertexPosition.xyz);
+        normal = vertNormal;
     }
 `;
 
 const fsSource = `
     precision mediump float;
 
-    varying vec3 color;
+    varying vec3 normal;
+
+    vec3 light = normalize(vec3(0.0, 0.0, -1.0));
+    vec3 color = vec3(0.29, 0.54, 0.95);
 
     void main() {
-        gl_FragColor = vec4(color.z/5.0, 0.0, 0.0, 1.0);
+        float light = dot(-normal, light);
+        gl_FragColor = vec4(color*light, 1.0);
     }
 `;
 
@@ -62,6 +67,7 @@ var setupRenderer = function(canvas) {
         program: shaderProgram,
         attribLocations: {
           vertexPosition: gl.getAttribLocation(shaderProgram, 'aVertexPosition'),
+          vertNormalLocation: gl.getAttribLocation(shaderProgram, "vertNormal")
         },
         uniformLocations: {
           projectionMatrix: gl.getUniformLocation(shaderProgram, 'uProjectionMatrix'),
@@ -70,21 +76,16 @@ var setupRenderer = function(canvas) {
     };
 
     buffers = initBuffers(gl);
-
-    const numComponents = 3;  // pull out 2 values per iteration
-    const type = gl.FLOAT;    // the data in the buffer is 32bit floats
-    const normalize = false;  // don't normalize
-    const stride = 0;         // how many bytes to get from one set of values to the next
-    const offset = 0;         // how many bytes inside the buffer to start from
+    
     gl.bindBuffer(gl.ARRAY_BUFFER, buffers.position);
-    gl.vertexAttribPointer(
-        programInfo.attribLocations.vertexPosition,
-        numComponents,
-        type,
-        normalize,
-        stride,
-        offset);
+    gl.vertexAttribPointer(programInfo.attribLocations.vertexPosition, 3, gl.FLOAT, gl.FALSE, 0, 0);
     gl.enableVertexAttribArray(programInfo.attribLocations.vertexPosition);
+
+	gl.bindBuffer(gl.ARRAY_BUFFER, buffers.normals);
+    gl.vertexAttribPointer(programInfo.attribLocations.vertNormalLocation, 3, gl.FLOAT, gl.FALSE, 0, 0);
+	gl.enableVertexAttribArray(programInfo.attribLocations.vertNormalLocation);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
     gl.useProgram(programInfo.program);  
 
@@ -126,18 +127,30 @@ function initBuffers(gl) {
     const positionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
 
+    const normalBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+
     const indicesBuffer = gl.createBuffer();
 	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indicesBuffer);
 
     return {
       position: positionBuffer,
-      indices: indicesBuffer
+      indices: indicesBuffer,
+      normals: normalBuffer
     };
 }
 
 function updateRendererState(gl, mesh) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffers.position);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(mesh.verts), gl.STATIC_DRAW);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffers.normals);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(mesh.normals), gl.STATIC_DRAW);
+
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers.indices);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(mesh.indices), gl.STATIC_DRAW);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
     indicesLength = mesh.indices.length;
 }
 
