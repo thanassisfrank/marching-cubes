@@ -668,47 +668,48 @@ var generateDataNormals = function(dataObj) {
         for (let j = 0; j < dataObj.size[1]; j++) {
             normals[i].push([]);
             for (let k = 0; k < dataObj.size[2]; k++) {
-                normals[i][j].push(getDataPointNormal(data, [i, j, k], dataObj.cellSize));
+                normals[i][j].push(getDataPointNormal(data, [i, j, k], dataObj.size, dataObj.cellSize));
             }
         }
     }
 }
 
-function getDataPointNormal(data, coord, cellSize) {
+function getDataPointNormal(data, coord, size, cellSize) {
     const i = coord[0];
     const j = coord[1];
     const k = coord[2];
     let dx, dy, dz;
     // x(i) component
     if (i > 0) {
-        if (i < data.length - 2){
-            dx = (data[i+1][j][k] - data[i-1][j][k])/cellSize[0]
+        if (i < size[0] - 2){
+            dx = (data[i+1][j][k] - data[i-1][j][k])/(2*cellSize[0])
         } else {
-            dx = (data[i][j][k] - data[i-1][j][k])/(2*cellSize[0])
+            dx = (data[i][j][k] - data[i-1][j][k])/cellSize[0]
         }
     } else {
-        dx = ((data[i+1][j][k] - data[i][j][k])/(2*cellSize[0]))
+        dx = ((data[i+1][j][k] - data[i][j][k])/(cellSize[0]))
     }
     // y(j) component
     if (j > 0) {
-        if (j < data.length - 2){
-            dy = (data[i][j+1][k] - data[i][j-1][k])/cellSize[0]
+        if (j < size[1] - 2){
+            dy = (data[i][j+1][k] - data[i][j-1][k])/(2*cellSize[1])
         } else {
-            dy = (data[i][j][k] - data[i][j-1][k])/(2*cellSize[0])
+            dy = (data[i][j][k] - data[i][j-1][k])/cellSize[1]
         }
     } else {
-        dy = ((data[i][j+1][k] - data[i][j][k])/(2*cellSize[0]))
+        dy = ((data[i][j+1][k] - data[i][j][k])/(cellSize[1]))
     }
     // z(k) component
     if (k > 0) {
-        if (k < data.length - 2){
-            dz = (data[i][j][k+1] - data[i][j][k-1])/cellSize[0]
+        if (k < size[2] - 2){
+            dz = (data[i][j][k+1] - data[i][j][k-1])/(2*cellSize[2])
         } else {
-            dz = (data[i][j][k] - data[i][j][k-1])/(2*cellSize[0])
+            dz = (data[i][j][k] - data[i][j][k-1])/cellSize[2]
         }
     } else {
-        dz = ((data[i][j][k+1] - data[i][j][k])/(2*cellSize[0]))
+        dz = ((data[i][j][k+1] - data[i][j][k])/(cellSize[2]))
     }
+    //console.log(VecMath.normalise([dx, dy, dz]));
     return VecMath.normalise([dx, dy, dz]);
 }
 
