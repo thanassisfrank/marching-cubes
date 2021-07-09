@@ -562,7 +562,7 @@ const triTable = [
     []
 ]
 
-// takes 3d data (val >= 0) as a 3d array and returns list of vertices and indices for the mesh
+// takes 3d data (val >= 0) as a 3d array and returns list of vertices (1d float32) and indices (1d uint16) for the mesh
 // at the supplied threshold value
 var generateMesh = function(data, threshold) {
     //const start = Date.now();
@@ -576,7 +576,7 @@ var generateMesh = function(data, threshold) {
     for (let i = 0; i < data.length-1; i++) {
         for (let j = 0; j < data[i].length-1; j++) {
             for (let k = 0; k < data[i][j].length-1; k++) {
-                const otherVertLength = verts.length;
+                const otherVertLength = verts.length/3;
 
                 // values for cell data points are stored as 1d array
                 // index = i + 2*j + 4*k (local coords)
@@ -605,7 +605,6 @@ var generateMesh = function(data, threshold) {
                 let theseIndices = tri.map(a => a + otherVertLength);
 
                 //calculate normal vector for each vertex
-
 
                 verts.push(...theseVerts);
                 indices.push(...theseIndices);
@@ -656,7 +655,7 @@ var edgesToCoords = (edges, cellCoord, cellDims, factors) => {
         let b = vertCoordTable[verts[1]];
         // pass into interpolate coords
         // add to coords list
-        coords.push(VecMath.vecAdd(VecMath.vecMult(interpolateCoord(a, b, factors[i]), cellDims), cellCoord));
+        coords.push(...VecMath.vecAdd(VecMath.vecMult(interpolateCoord(a, b, factors[i]), cellDims), cellCoord));
     }
     return coords;
 }

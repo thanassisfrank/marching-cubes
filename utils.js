@@ -1,6 +1,6 @@
 // utils.js
 
-export {get, getCtx, sin30, cos30, toRads};
+export {get, getCtx, sin30, cos30, toRads, unZipVerts};
 
 var get = (id) => {
     return document.getElementById(id)
@@ -34,5 +34,16 @@ var to3dArray = (a, d) => {
         }
     }
     return a3
+}
+
+function unZipVerts(verts) {
+    let vertsOut = [];
+    for (let i = 0; i < verts.length; i++) {
+        vertsOut.push(verts[i][0])
+        vertsOut.push(verts[i][1])
+        vertsOut.push(verts[i][2])
+    }
+
+    return vertsOut;
 }
 
