@@ -1,25 +1,13 @@
 // main.js
 
 import {get, toRads} from "./utils.js";
+import {Data} from "./data.js";
 import {mat4} from 'https://cdn.skypack.dev/gl-matrix';
+import {VecMath} from "./VecMath.js";
 import {generateMesh, generateDataNormals} from "./marching.js";
 import {setupRenderer, updateRendererState, renderFrame} from "./webglRender.js";
 
 document.body.onload = main;
-
-var generateData = (x, y, z, f) => {
-    var data = [];
-    for (let i = 0; i < x; i++) {
-        data[i] = [];
-        for (let j = 0; j < y; j++) {
-            data[i][j] = [];
-            for (let k = 0; k < z; k++) {
-                data[i][j].push(f(i, j, k));
-            }
-        }
-    }
-    return data
-}
 
 function getProjMat(th, phi, dist) {
     let projMat = mat4.create();
@@ -45,15 +33,19 @@ function getProjMat(th, phi, dist) {
 }
 
 function main() {
-    //const data = generateData(15, 15, 15, (i, j, k) => Math.cos(Math.sqrt(Math.pow(i, 2) + Math.pow(j, 2) + Math.pow(k, 2))/4) + 1);
-    //const data = generateData(15, 15, 15, (i, j, k) => Math.sqrt(Math.pow(i-7, 2) + Math.pow(j-7, 2) + Math.pow(k-7, 2))/5);
-    //const data = generateData(2, 2, 2, (i, j, k) => Math.random());
-    const data = generateData(10, 10, 10, (i, j, k) => i);
 
-    console.log(generateDataNormals(data, [1, 1, 1]));
+    var data = new Data();
 
-    const dataSize = Math.max(data.length, data[0].length, data[0][0].length)
-    var dist = 1.2*dataSize;
+    // data.generateData(15, 15, 15, (i, j, k) => Math.cos(Math.sqrt(Math.pow(i, 2) + Math.pow(j, 2) + Math.pow(k, 2))/4) + 1);
+    // data.generateData(15, 15, 15, (i, j, k) => Math.sqrt(Math.pow(i-7, 2) + Math.pow(j-7, 2) + Math.pow(k-7, 2))/5);
+    // data.generateData(2, 2, 2, (i, j, k) => Math.random());
+    data.generateData(10, 10, 10, (i, j, k) => i);
+
+    data.normals = generateDataNormals(data.data, [1, 1, 1]);
+
+    //console.log(data.normals);
+
+    var dist = 1.2*data.maxSize;
 
     var canvas = get("c");
     var th = 0;
@@ -84,7 +76,7 @@ function main() {
     };
     canvas.onwheel = function(e) {
         e.preventDefault();
-        dist = Math.max(dataSize/100, dist + (e.deltaY*dataSize)/1000);
+        dist = Math.max(data.maxSize/100, dist + (e.deltaY*data.maxSize)/1000);
         projMat = getProjMat(th, phi, dist);
     }
 
@@ -98,18 +90,18 @@ function main() {
 
     
     var threshold = parseFloat(get("thresholdInput").value);
-    var mesh = generateMesh(data, threshold);
+    var mesh = generateMesh(data.data, threshold);
     updateRendererState(ctx, mesh);
     
     get("thresholdInput").oninput = function() {
         threshold = parseFloat(this.value);
-        mesh = generateMesh(data, threshold);
+        mesh = generateMesh(data.data, threshold);
         updateRendererState(ctx, mesh);
     }
 
     const modelMat = mat4.create();
     mat4.rotateX(modelMat, modelMat, toRads(-90));
-    mat4.translate(modelMat, modelMat, [-(data.length-1)/2, -(data[0].length-1)/2, -(data[0][0].length-1)/2])
+    mat4.translate(modelMat, modelMat, VecMath.scalMult(-1, data.midPoint));
 
     var renderLoop = () => {
         renderFrame(ctx, projMat, modelMat);
