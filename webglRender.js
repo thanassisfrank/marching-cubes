@@ -3,6 +3,7 @@
 
 import {getCtx, toRads} from "./utils.js";
 import {mat4} from 'https://cdn.skypack.dev/gl-matrix';
+import {VecMath} from "./VecMath.js";
 export {setupRenderer, updateRendererState, renderFrame};
 
 var vertShader;
@@ -55,6 +56,7 @@ var setupRenderer = function(canvas) {
     gl.enable(gl.DEPTH_TEST)
     gl.depthFunc(gl.LESS);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.SCISSOR_TEST);
 
     //gl.enable(gl.CULL_FACE);
     //gl.cullFace(gl.BACK);
@@ -134,6 +136,9 @@ function initBuffers(gl) {
     const indicesBuffer = gl.createBuffer();
 	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indicesBuffer);
 
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+
     return {
       position: positionBuffer,
       indices: indicesBuffer,
@@ -152,6 +157,7 @@ function updateRendererState(gl, mesh) {
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(mesh.indices), gl.DYNAMIC_DRAW);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    //gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
     
     indicesLength = mesh.indices.length;
 }
@@ -164,11 +170,37 @@ var renderFrame = function(gl, projMat, modelMat) {
         false,
         projMat
     );
+
     gl.uniformMatrix4fv(
         programInfo.uniformLocations.modelViewMatrix,
         false,
         modelMat
     );
+
+    gl.drawElements(gl.TRIANGLES, indicesLength, gl.UNSIGNED_SHORT, 0);
+}
+
+var renderView = function(gl, projMat, modelMat, box, buffersId) {
+    gl.viewPort(box.left, box.top, box.width, box.height);
+    gl.scissor(left, bottom, width, height);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    
+    gl.uniformMatrix4fv(
+        programInfo.uniformLocations.projectionMatrix,
+        false,
+        projMat
+    );
+    gl.uniformMatrix4fv(
+        programInfo.uniformLocations.modelViewMatrix,
+        false,
+        modelMat
+    );
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffers[buffersId].position);
+    gl.vertexAttribPointer(programInfo.attribLocations.vertexPosition, 3, gl.FLOAT, gl.FALSE, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffers[buffersId].normal);
+    gl.vertexAttribPointer(programInfo.attribLocations.vertNormalLocation, 3, gl.FLOAT, gl.FALSE, 0, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers[buffersId].indices);
 
     gl.drawElements(gl.TRIANGLES, indicesLength, gl.UNSIGNED_SHORT, 0);
 }

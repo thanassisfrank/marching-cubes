@@ -10,6 +10,10 @@ var getCtx = (canvas, type) => {
     return canvas.getContext(type);
 }
 
+var create = (type) => {
+    return document.createElement(type);
+}
+
 const sin30 = Math.sin(Math.PI/6);
 const cos30 = Math.cos(Math.PI/6);
 

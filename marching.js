@@ -606,8 +606,8 @@ var generateMesh = function(dataObj, threshold) {
                 const theseIndices = tri.map(a => a + otherVertLength);
 
                 //calculate normal vector for each vertex
-                const theseNormals = getVertexNormals(edges, [i, j, k], dataObj, factors);
-                //const theseNormals = getVertexNormalsFlat(theseVerts, tri, [i, j, k]);
+                //const theseNormals = getVertexNormals(edges, [i, j, k], dataObj, factors);
+                const theseNormals = getVertexNormalsFlat(theseVerts, tri, [i, j, k]);
 
                 verts.push(...theseVerts);
                 indices.push(...theseIndices);

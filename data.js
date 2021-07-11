@@ -102,9 +102,4 @@ function Data() {
         vec3.set(n, dx, dy, dz);
         vec3.normalize(n, n);
     };
-    
 }
-
-Data.index = (d, i, j, k) => {
-    return d.data[i * d.size[1] * d.size[2] + j * d.size[2] + k];
-};
