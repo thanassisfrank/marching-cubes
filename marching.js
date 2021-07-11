@@ -3,7 +3,7 @@
 
 import {VecMath} from "./VecMath.js";
 import {vec3} from "https://cdn.skypack.dev/gl-matrix";
-export {generateMesh, generateDataNormals};
+export {generateMesh};
 
 // vertex and edge convention used:
 //                 7-------6          x---6---x
@@ -606,8 +606,8 @@ var generateMesh = function(dataObj, threshold) {
                 const theseIndices = tri.map(a => a + otherVertLength);
 
                 //calculate normal vector for each vertex
-                //const theseNormals = getVertexNormals(edges, [i, j, k], dataObj, factors);
-                const theseNormals = getVertexNormalsFlat(theseVerts, tri, [i, j, k]);
+                const theseNormals = getVertexNormals(edges, [i, j, k], dataObj, factors);
+                //const theseNormals = getVertexNormalsFlat(theseVerts, tri, [i, j, k]);
 
                 verts.push(...theseVerts);
                 indices.push(...theseIndices);
@@ -663,57 +663,8 @@ var edgesToCoords = (edges, cellCoord, cellDims, factors) => {
     return coords;
 }
 
-var generateDataNormals = function(dataObj) {
-    dataObj.normals = new Float32Array(dataObj.size[0] * dataObj.size[1] * dataObj.size[2] * 3);
-    for (let i = 0; i < dataObj.size[0]; i++) {
-        for (let j = 0; j < dataObj.size[1]; j++) {
-            for (let k = 0; k < dataObj.size[2]; k++) {
-                dataObj.setNormal(i, j, k, getDataPointNormal(dataObj, [i, j, k], dataObj.size, dataObj.cellSize));
-            }
-        }
-    }
-}
-
-function getDataPointNormal(dataObj, coord, size, cellSize) {
-    const i = coord[0];
-    const j = coord[1];
-    const k = coord[2];
-    let dx, dy, dz;
-    // x(i) component
-    if (i > 0) {
-        if (i < size[0] - 2){
-            dx = (dataObj.index(i+1, j, k) - dataObj.index(i-1, j, k))/(2*cellSize[0])
-        } else {
-            dx = (dataObj.index(i, j, k) - dataObj.index(i-1, j, k))/cellSize[0]
-        }
-    } else {
-        dx = ((dataObj.index(i+1, j, k) - dataObj.index(i, j, k))/(cellSize[0]))
-    }
-    // y(j) component
-    if (j > 0) {
-        if (j < size[1] - 2){
-            dy = (dataObj.index(i, j+1, k) - dataObj.index(i, j-1, k))/(2*cellSize[1])
-        } else {
-            dy = (dataObj.index(i, j, k) - dataObj.index(i, j-1, k))/cellSize[1]
-        }
-    } else {
-        dy = ((dataObj.index(i, j+1, k) - dataObj.index(i, j, k))/(cellSize[1]))
-    }
-    // z(k) component
-    if (k > 0) {
-        if (k < size[2] - 2){
-            dz = (dataObj.index(i, j, k+1) - dataObj.index(i, j, k-1))/(2*cellSize[2])
-        } else {
-            dz = (dataObj.index(i, j, k) - dataObj.index(i, j, k-1))/cellSize[2]
-        }
-    } else {
-        dz = ((dataObj.index(i, j, k+1) - dataObj.index(i, j, k))/(cellSize[2]))
-    }
-    //console.log(VecMath.normalise([dx, dy, dz]));
-    return VecMath.normalise([dx, dy, dz]);
-}
-
 function getVertexNormals(edges, coord, dataObj, factors) {
+    if (!dataObj.normalsPopulated) dataObj.generateNormals();
     let normals = [];
     // loop through each edge
     for (let i = 0; i < edges.length; i++) { 

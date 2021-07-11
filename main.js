@@ -4,7 +4,7 @@ import {get, toRads} from "./utils.js";
 import {Data} from "./data.js";
 import {mat4} from 'https://cdn.skypack.dev/gl-matrix';
 import {VecMath} from "./VecMath.js";
-import {generateMesh, generateDataNormals} from "./marching.js";
+import {generateMesh} from "./marching.js";
 import {setupRenderer, updateRendererState, renderFrame} from "./webglRender.js";
 
 document.body.onload = main;
@@ -101,9 +101,11 @@ function main() {
             let mesh;
             for (let i = 0; i < amount; i++) {
                 mesh = generateMesh(data, threshold);
+                //data.generateNormals();
             }
             const dt = Date.now()-start;
-            console.log("Speed for " + String(mesh.verts.length) + " verts: " + String(Math.round(amount*1000/dt)) + "/s")
+            console.log("Speed for " + mesh.verts.length + " verts: " + String(dt/amount) + "ms")
+            //console.log("Speed for " + data.data.length + " points: " + String(dt/amount) + "ms")
         }
     }
 
