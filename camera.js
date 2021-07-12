@@ -9,8 +9,16 @@ function Camera() {
     this.th = 0;
     this.phi = 0;
     this.fov = 80;
+    this.modelMat;
     this.projMat;
     this.projMatValid = false;
+    this.mouseStart = [0, 0];
+    this.startTh = 0;
+    this.startPhi = 0;
+    this.mouseDown = false;
+    this.setModelMat = function(mat) {
+        this.modelMat = mat;
+    }
     this.getProjMat = function() {
         if (!this.projMatValid) {
             let projMat = mat4.create();
@@ -48,5 +56,25 @@ function Camera() {
     this.setPhi = function(phi) {
         this.phi = phi;
         this.projMatValid = false;
+    }
+    this.startMove = function(x, y) {
+        this.mouseStart = [x, y];
+        this.mouseDown = true;
+        this.startTh = this.th;
+        this.startPhi = this.phi;
+    }
+    this.move = function(x, y) {
+        if (this.mouseDown) {
+            const diffX = x - this.mouseStart[0];
+            const diffY = y - this.mouseStart[1];
+            this.setTh(this.startTh + diffX/4);
+            this.setPhi(Math.max(Math.min(this.startPhi - diffY/4, 90), -90));
+        }
+    }
+    this.endMove = function() {
+        this.mouseDown = false;
+    }
+    this.changeDist = function(d) {
+        this.setDist(Math.max(0.1, this.dist + (d)/100));
     }
 }

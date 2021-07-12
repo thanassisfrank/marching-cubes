@@ -1,6 +1,6 @@
 // utils.js
 
-export {get, getCtx, sin30, cos30, toRads, unZipVerts};
+export {get, getCtx, create, setupCanvasDims, getFirstOfClass, sin30, cos30, toRads, unZipVerts};
 
 var get = (id) => {
     return document.getElementById(id)
@@ -12,6 +12,16 @@ var getCtx = (canvas, type) => {
 
 var create = (type) => {
     return document.createElement(type);
+}
+
+var setupCanvasDims = (canvas) => {
+    let style = getComputedStyle(canvas)
+    canvas.width = parseInt(style.getPropertyValue("width"));
+    canvas.height = parseInt(style.getPropertyValue("height"));
+}
+
+var getFirstOfClass = (className) => {
+    return document.getElementsByClassName(className)[0];
 }
 
 const sin30 = Math.sin(Math.PI/6);

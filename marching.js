@@ -565,11 +565,9 @@ const triTable = [
 
 // takes data object as a 3d array and returns list of vertices (1d float32) and indices (1d uint16) for the mesh
 // at the supplied threshold value
-var generateMesh = function(dataObj, threshold) {
+var generateMesh = function(dataObj, meshObj, threshold) {
     //const start = Date.now();
-    let verts = [];
-    let indices = [];
-    let normals = [];
+    meshObj.clear();
 
     //loop through every cell
 
@@ -577,7 +575,7 @@ var generateMesh = function(dataObj, threshold) {
         for (let j = 0; j < dataObj.size[1] - 1; j++) {
             for (let k = 0; k < dataObj.size[2] - 1; k++) {
                 //if (i != 7 || j != 3 || k != 10) continue;
-                const otherVertLength = verts.length/3;
+                const otherVertLength = meshObj.verts.length/3;
 
                 // values for cell data points are stored as 1d array
                 // index = i + 2*j + 4*k (local coords)
@@ -609,14 +607,13 @@ var generateMesh = function(dataObj, threshold) {
                 //const theseNormals = getVertexNormals(edges, [i, j, k], dataObj, factors);
                 const theseNormals = getVertexNormalsFlat(theseVerts, tri, [i, j, k]);
 
-                verts.push(...theseVerts);
-                indices.push(...theseIndices);
-                normals.push(...theseNormals);
+                meshObj.verts.push(...theseVerts);
+                meshObj.indices.push(...theseIndices);
+                meshObj.normals.push(...theseNormals);
             }
         }
     }
     //console.log("mesh generation took: ", Date.now() - start);
-    return {verts:verts, indices:indices, normals:normals};
 }
 
 var edgesToFactors = (edges, cellVals, threshold) => {

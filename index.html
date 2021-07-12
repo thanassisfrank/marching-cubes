@@ -2,15 +2,45 @@
 <head>
     <title>marching test</title>
     <style>
+        body {
+            padding: 0px;
+            margin: 0px
+        }
         #c {
-            border: 1px solid black
+            position: absolute;
+            left: 0px;
+            top: 0px;
+            width: calc(100vw - 2px);
+            height: calc(100vh - 2px);
+            margin: 0px;
+            border: 1px solid black;
+        }
+        #view-container-container {
+            position: absolute;
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            align-items: flex-start;
+            justify-content: flex-start;
+            width: 100vw;
+            height: 100vh;
+        }
+        .view-container {
+            border: 3px solid black;
+            border-radius: 10px;
+            padding: 10px;
+            margin: 20px;
+        }
+        .view-frame {
+            /* border: 1px solid blue; */
+            height: 400px;
+            width: 400px;
         }
     </style>
 </head>
 <body>
-    <canvas id="c" width="700" height="700"></canvas>
-    <br>
-    <input id="thresholdInput" type="range" min="0" max="5" value="0.5" step="0.05">
-
+    <canvas id="c"></canvas>
+    <div id="view-container-container">
+    </div>
     <script type="module" src="./main.js"></script>
 </body>
