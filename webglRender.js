@@ -4,7 +4,7 @@
 import {getCtx, toRads} from "./utils.js";
 import {mat4} from 'https://cdn.skypack.dev/gl-matrix';
 import {VecMath} from "./VecMath.js";
-export {setupRenderer, updateRendererState, renderFrame, createBuffers, updateBuffers, renderView};
+export {setupRenderer, updateRendererState, renderFrame, createBuffers, updateBuffers, deleteBuffers, clearScreen, renderView};
 
 var gl;
 var vertShader;
@@ -13,6 +13,8 @@ var buffers = {};
 var indicesLength;
 var shaderProgram;
 var programInfo;
+
+const clearColor = [1.0, 1.0, 1.0, 1.0];
 
 const vsSource = `
     attribute vec4 aVertexPosition;
@@ -53,7 +55,7 @@ var setupRenderer = function(canvas) {
         return;
     }
 
-    gl.clearColor(0.8, 0.8, 0.8, 1.0);
+    gl.clearColor(...clearColor);
     gl.clearDepth(1.0);
     gl.enable(gl.DEPTH_TEST)
     gl.depthFunc(gl.LESS);
@@ -195,7 +197,17 @@ function updateBuffers(mesh, id) {
 }
 
 function deleteBuffers(id) {
+    gl.deleteBuffer(buffers[id].position);
+    gl.deleteBuffer(buffers[id].indices);
+    gl.deleteBuffer(buffers[id].normal);
     delete buffers[id];
+}
+
+function clearScreen(gl) {
+    gl.clearColor(1.0, 1.0, 1.0, 1.0);
+    gl.scissor(0, 0, gl.canvas.width, gl.canvas.height)
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.clearColor(...clearColor);
 }
 
 // for rendering a particular set of buffers associated with a view

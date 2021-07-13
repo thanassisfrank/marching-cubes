@@ -1,6 +1,6 @@
 // utils.js
 
-export {get, getCtx, create, setupCanvasDims, getFirstOfClass, sin30, cos30, toRads, unZipVerts};
+export {get, getCtx, create, setupCanvasDims, getFirstOfClass, repositionCanvas, sin30, cos30, toRads, unZipVerts};
 
 var get = (id) => {
     return document.getElementById(id)
@@ -18,6 +18,12 @@ var setupCanvasDims = (canvas) => {
     let style = getComputedStyle(canvas)
     canvas.width = parseInt(style.getPropertyValue("width"));
     canvas.height = parseInt(style.getPropertyValue("height"));
+}
+
+var repositionCanvas = (canvas) => {
+    canvas.style.top = window.scrollY + "px";
+    //canvas.style.left = window.scrollX + "px";
+    //console.log(window.scrollX)
 }
 
 var getFirstOfClass = (className) => {

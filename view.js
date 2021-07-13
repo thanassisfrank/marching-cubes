@@ -8,12 +8,12 @@ import { get, create, toRads } from "./utils.js";
 import { generateMesh } from "./marching.js";
 import { VecMath } from "./VecMath.js";
 import {mat4} from 'https://cdn.skypack.dev/gl-matrix';
-import {createBuffers, updateBuffers, renderView} from "./webglRender.js";
+import {createBuffers, updateBuffers, deleteBuffers, clearScreen, renderView} from "./webglRender.js";
 
 export {view};
 
 var view = {
-    maxViews: 10,
+    maxViews: 30,
     // an object to hold all views that have been created
     views: {},
     initialThreshold: 0.5,
@@ -69,11 +69,17 @@ var view = {
         slider.max = 5;
         slider.value = this.initialThreshold;
         slider.step = 0.05;
-        var text = create("P");
-        text.innerHTML = id;
+        var closeBtn = create("BUTTON");
+        closeBtn.onclick = () => {
+            this.deleteView(id);
+        }
+        closeBtn.innerHTML = "X";
+        //var text = create("P");
+        //text.innerHTML = id;
         viewContainer.appendChild(frame);
         viewContainer.appendChild(slider);
-        viewContainer.appendChild(text);
+        viewContainer.appendChild(closeBtn)
+        //viewContainer.appendChild(text);
 
         // set event listeners for the elements
         frame.onmousedown = function(e) {
@@ -103,12 +109,16 @@ var view = {
 
     }, 
     deleteView: function(id) {
-        views?.[id].delete();
+        this.views?.[id].delete();
+        delete this.views[id];
     },
     render: function(gl) {
         // call the render functions of all currently active views
         for (let key in this.views) {
             this.views[key].render(gl);
+        }
+        if (Object.keys(this.views).length == 0) {
+            clearScreen(gl);
         }
     },
     View: function(id, camera, data, mesh, threshold) {
@@ -121,23 +131,31 @@ var view = {
         this.box = {};
         this.init = function() {
             this.bufferId = createBuffers();
-            generateMesh(this.data, this.mesh, this.threshold);
-            // maybe generate the normals
-            updateBuffers(this.mesh, this.bufferId);
+            this.updateThreshold(this.threshold);
         }
         this.updateThreshold = function(val) {
             this.threshold = val;
-            generateMesh(this.data, this.mesh, this.threshold);
+            this.generateMesh();
+            this.updateBuffers();
+        }
+        this.generateMesh = function() {
+            generateMesh(this.data, this.mesh, this.threshold)
+        }
+        this.updateBuffers = function() {
             updateBuffers(this.mesh, this.bufferId);
         }
         this.getFrameElem = function() {
             return get(this.id).children[0];
         }
+        this.getViewContainer = function() {
+            return get(this.id);
+        }
         this.getBox = function() {
             // find the box corresponding to the associated frame element
             var rect = this.getFrameElem().getBoundingClientRect();
-            this.box.left = rect.left;
-            this.box.bottom = window.innerHeight - rect.bottom;
+            var canvasRect = get("c").getBoundingClientRect();
+            this.box.left = rect.left - canvasRect.left// + window.scrollX;
+            this.box.bottom = window.innerHeight + canvasRect.top - rect.bottom// - window.scrollY;
             this.box.width = rect.width;
             this.box.height = rect.width;
 
@@ -150,6 +168,8 @@ var view = {
             renderView(gl, this.camera.getProjMat(), this.camera.modelMat, this.getBox(), this.mesh.indices.length, this.bufferId)
         }
         this.delete = function() {
+            this.getViewContainer().remove();
+            deleteBuffers(this.bufferId);
             // delete associated buffers on gpu
             //    call renderer's delete associated buffers function
             // delete associated DOM elements using elem.remove();
