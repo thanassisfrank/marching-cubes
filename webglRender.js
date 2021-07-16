@@ -86,10 +86,6 @@ var setupRenderer = function(canvas) {
     gl.depthFunc(gl.LESS);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.SCISSOR_TEST);
-    const index32 = gl.getExtension("OES_element_index_uint");
-    if (index32 == null) {
-        console.log("32 bit indices not supported");
-    }
 
     shaderProgram = initShaderProgram(gl, vsSource, fsSource)
     if (shaderProgram === null) {
