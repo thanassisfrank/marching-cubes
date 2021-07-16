@@ -28,10 +28,16 @@ function Data() {
         this.normals[ind+1] = val[1];
         this.normals[ind+2] = val[2];
     }
-    this.generateData = function(x, y, z, f) {
+    this.initialise = function(x, y, z) {
         this.normalsInitialised = false;
         this.normalsPopulated = false;
         this.volume = x * y * z;
+        this.maxSize = Math.max(x, y, z);
+        this.midPoint = [(x-1)/2, (y-1)/2, (z-1)/2];
+        this.size = [x, y, z];
+    }
+    this.generateData = function(x, y, z, f) {
+        this.initialise(x, y, z);
         this.data = new Float32Array(this.volume);
         for (let i = 0; i < x; i++) {
             for (let j = 0; j < y; j++) {
@@ -41,11 +47,11 @@ function Data() {
                 }
             }
         }
-        this.maxSize = Math.max(x, y, z);
-        this.midPoint = [(x-1)/2, (y-1)/2, (z-1)/2];
-        this.size = [x, y, z];
         return this.data;
     };
+    this.fromFile = function(x, y, z) {
+
+    }
     this.setCellSize = function(size) {
         this.cellSize = size;
     };

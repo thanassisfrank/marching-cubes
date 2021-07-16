@@ -570,49 +570,47 @@ var generateMesh = function(dataObj, meshObj, threshold) {
     meshObj.clear();
 
     //loop through every cell
+    let code = 0;
+    let coord = new Array(3);
+    let vertsLength = 0;
 
-    for (let i = 0; i < dataObj.size[0] - 1; i++) {
-        for (let j = 0; j < dataObj.size[1] - 1; j++) {
-            for (let k = 0; k < dataObj.size[2] - 1; k++) {
+    let edges;
+    let factors;
+    let tri;
+
+    for (coord[0] = 0; coord[0] < dataObj.size[0] - 1; coord[0]++) {
+        for (coord[1] = 0; coord[1] < dataObj.size[1] - 1; coord[1]++) {
+            for (coord[2] = 0; coord[2] < dataObj.size[2] - 1; coord[2]++) {
                 //if (i != 7 || j != 3 || k != 10) continue;
-                const otherVertLength = meshObj.verts.length/3;
+                vertsLength = meshObj.verts.length/3;
 
                 // values for cell data points are stored as 1d array
                 // index = i + 2*j + 4*k (local coords)
-                let cellVals = [];
-
                 // generate code for the cell
-                var code = 0;
-                for (let l = 0; l < 8; l++) {
-                    const c = vertCoordTable[l];
-                    const val = dataObj.index(i + c[0], j + c[1], k + c[2]);
-                    code |= (val > threshold) << l;
-                    cellVals[c[0] + 2*c[1] + 4*c[2]] = val;
-                }
+
+                code = getCode(coord, dataObj, threshold);
                 
                 if (code == 0 || code == 255) continue;
 
                 // gets appropriate active edges
-                const edges = edgeTable[code];
+                edges = edgeTable[code];
 
                 //calculate factors for each edge (distance from 1st connected vertex in index space)
-                const factors = edgesToFactors(edges, cellVals, threshold);
+                factors = edgesToFactors(edges, coord, dataObj, threshold);
 
                 //turns edge list into coords
-                const theseVerts = edgesToCoords(edges, [i, j, k], dataObj.cellSize, factors);
+                edgesToCoords(meshObj.verts, edges, coord, dataObj.cellSize, factors);
                 
                 //create entries for indicies list
-                const tri = triTable[code];
-                const theseIndices = tri.map(a => a + otherVertLength);
+                tri = triTable[code];
+                for (let l = 0; l < tri.length; l++) {
+                    meshObj.indices.push(tri[l] + vertsLength)
+                }
 
                 //calculate normal vector for each vertex
-                const theseNormals = getVertexNormals(edges, [i, j, k], dataObj, factors);
+                getVertexNormals(meshObj.normals, edges, coord, dataObj, factors);
                 //const theseNormals = getVertexNormalsFlat(theseVerts, tri, [i, j, k]);
                 //const theseNormals = emptyNormals(edges);
-
-                meshObj.verts.push(...theseVerts);
-                meshObj.indices.push(...theseIndices);
-                meshObj.normals.push(...theseNormals);
             }
         }
     }
@@ -620,7 +618,16 @@ var generateMesh = function(dataObj, meshObj, threshold) {
     //console.log("mesh generation took: ", Date.now() - start);
 }
 
-const edgesToFactors = (edges, cellVals, threshold) => {
+const getCode = (coord, dataObj, threshold) => {
+    let code = 0;
+    for (let l = 0; l < 8; l++) {
+        const c = vertCoordTable[l];
+        code |= (dataObj.index(coord[0] + c[0], coord[1] + c[1], coord[2] + c[2]) > threshold) << l;
+    }
+    return code;
+}
+
+const edgesToFactors = (edges, coord, dataObj, threshold) => {
     let factors = [];
     for (let i = 0; i < edges.length; i++) { 
         let verts = edgeToVertsTable[edges[i]]
@@ -629,8 +636,8 @@ const edgesToFactors = (edges, cellVals, threshold) => {
 
         // get interpolation factor
         // get values at connected vertices
-        const va = cellVals[a[0] + 2*a[1] + 4*a[2]];
-        const vb = cellVals[b[0] + 2*b[1] + 4*b[2]];
+        const va = dataObj.index(coord[0] + a[0], coord[1] + a[1], coord[2] + a[2]);
+        const vb = dataObj.index(coord[0] + b[0], coord[1] + b[1], coord[2] + b[2]);
         factors.push((threshold-va)/(vb-va));
     }
     return factors;
@@ -647,32 +654,27 @@ const interpolateCoord = (a, b, fac) => {
 
 // cellCoord is coord of 0 vertex in cell
 // preserves order
-const edgesToCoords = (edges, cellCoord, cellDims, factors) => {
-    let coords = [];
+const edgesToCoords = (verts, edges, cellCoord, cellDims, factors) => {
     // loop through each edge
     for (let i = 0; i < edges.length; i++) { 
-
         // get verts associated with it
-        let verts = edgeToVertsTable[edges[i]]
+        let theseVerts = edgeToVertsTable[edges[i]]
         // get coords of that vert in index space
-        let a = vertCoordTable[verts[0]]; 
-        let b = vertCoordTable[verts[1]];
         // pass into interpolate coords
         // add to coords list
-        const coord = interpolateCoord(a, b, factors[i]);
-        coords.push(
+        const coord = interpolateCoord(vertCoordTable[theseVerts[0]], vertCoordTable[theseVerts[1]], factors[i]);
+        verts.push(
             coord[0]*cellDims[0]+cellCoord[0],
             coord[1]*cellDims[1]+cellCoord[1],
             coord[2]*cellDims[2]+cellCoord[2],
             )
         //coords.push(...VecMath.vecAdd(VecMath.vecMult(interpolateCoord(a, b, factors[i]), cellDims), cellCoord));
     }
-    return coords;
+    //return coords;
 }
 
-const getVertexNormals = (edges, coord, dataObj, factors) => {
+const getVertexNormals = (normals, edges, coord, dataObj, factors) => {
     if (!dataObj.normalsPopulated) dataObj.generateNormals();
-    let normals = [];
     // loop through each edge
     for (let i = 0; i < edges.length; i++) { 
         // get verts associated with it
