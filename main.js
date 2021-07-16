@@ -1,12 +1,9 @@
 // main.js
 
-import {get, create, setupCanvasDims, repositionCanvas, getFirstOfClass, toRads, sin30} from "./utils.js";
+import {get, setupCanvasDims, repositionCanvas} from "./utils.js";
 import {Data} from "./data.js";
 import {Camera} from "./camera.js";
-import {mat4} from 'https://cdn.skypack.dev/gl-matrix';
-import {VecMath} from "./VecMath.js";
-import {generateMesh} from "./marching.js";
-import {setupRenderer, createBuffers, updateBuffers, renderView} from "./webglRender.js";
+import {setupRenderer} from "./webglRender.js";
 import { Mesh } from "./mesh.js";
 import { view } from "./view.js";
 
@@ -37,7 +34,7 @@ function main() {
     var mesh1 = new Mesh();
 
     //data1.generateData(15, 15, 15, (i, j, k) => Math.cos(Math.sqrt(Math.pow(i, 2) + Math.pow(j, 2) + Math.pow(k, 2))/4) + 1);
-    //data1.generateData(15, 15, 15, (i, j, k) => Math.sqrt(Math.pow(i-7, 2) + Math.pow(j-7, 2) + Math.pow(k-7, 2))/5 + Math.random()/7);
+    //data1.generateData(15, 15, 15, (i, j, k) => Math.sqrt(Math.pow(i-7, 2) + Math.pow(j-7, 2) + Math.pow(k-7, 2))/5);
     //data1.generateData(20, 20, 20, (i, j, k) => Math.random());
     //data1.generateData(2, 2, 2, (i, j, k) => i + j + k);
     //data1.generateData(50, 50, 50, (i, j, k) => k/10 + Math.random()/5);

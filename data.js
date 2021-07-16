@@ -35,6 +35,7 @@ function Data() {
         this.maxSize = Math.max(x, y, z);
         this.midPoint = [(x-1)/2, (y-1)/2, (z-1)/2];
         this.size = [x, y, z];
+        this.cellsCount = (x-1)*(y-1)*(z-1);
         this.initialised = true;
     }
     this.generateData = function(x, y, z, f) {
