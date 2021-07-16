@@ -48,7 +48,7 @@ const fsSource = `
 
     Light light1 = Light(normalize(vec3(0.0, 0.0, -1.0)), vec3(1.0));
     vec3 color = vec3(0.29, 0.54, 0.95);
-    float shininess = 50.0;
+    float shininess = 200.0;
 
     void main() {
         vec3 E = normalize(vEye);

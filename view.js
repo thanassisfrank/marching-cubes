@@ -136,11 +136,13 @@ var view = {
             this.updateThreshold(this.threshold);
         }
         this.updateThreshold = function(val) {
-            this.updating = true;
-            this.threshold = val;
-            this.generateMesh();
-            this.updateBuffers();
-            this.updating = false;
+            if (this.data.initialised) {
+                this.updating = true;
+                this.threshold = val;
+                this.generateMesh();
+                this.updateBuffers();
+                this.updating = false;
+            };
         }
         this.generateMesh = function() {
             generateMesh(this.data, this.mesh, this.threshold)

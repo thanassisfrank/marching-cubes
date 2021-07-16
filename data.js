@@ -35,10 +35,11 @@ function Data() {
         this.maxSize = Math.max(x, y, z);
         this.midPoint = [(x-1)/2, (y-1)/2, (z-1)/2];
         this.size = [x, y, z];
+        this.initialised = true;
     }
     this.generateData = function(x, y, z, f) {
-        this.initialise(x, y, z);
-        this.data = new Float32Array(this.volume);
+        
+        this.data = new Float32Array(x * y * z);
         for (let i = 0; i < x; i++) {
             for (let j = 0; j < y; j++) {
                 for (let k = 0; k < z; k++) {
@@ -47,10 +48,12 @@ function Data() {
                 }
             }
         }
-        return this.data;
+        this.initialise(x, y, z);
     };
-    this.fromFile = function(x, y, z) {
+    this.fromFile = function(src, x, y, z) {
+        fetch(src).then(() => {
 
+        })
     }
     this.setCellSize = function(size) {
         this.cellSize = size;

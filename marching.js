@@ -577,6 +577,7 @@ var generateMesh = function(dataObj, meshObj, threshold) {
     let edges;
     let factors;
     let tri;
+    let theseVerts;
 
     for (coord[0] = 0; coord[0] < dataObj.size[0] - 1; coord[0]++) {
         for (coord[1] = 0; coord[1] < dataObj.size[1] - 1; coord[1]++) {
@@ -599,7 +600,7 @@ var generateMesh = function(dataObj, meshObj, threshold) {
                 factors = edgesToFactors(edges, coord, dataObj, threshold);
 
                 //turns edge list into coords
-                edgesToCoords(meshObj.verts, edges, coord, dataObj.cellSize, factors);
+                theseVerts = edgesToCoords(meshObj.verts, edges, coord, dataObj.cellSize, factors);
                 
                 //create entries for indicies list
                 tri = triTable[code];
@@ -609,7 +610,7 @@ var generateMesh = function(dataObj, meshObj, threshold) {
 
                 //calculate normal vector for each vertex
                 getVertexNormals(meshObj.normals, edges, coord, dataObj, factors);
-                //const theseNormals = getVertexNormalsFlat(theseVerts, tri, [i, j, k]);
+                //getVertexNormalsFlat(meshObj.normals, theseVerts, tri);
                 //const theseNormals = emptyNormals(edges);
             }
         }
@@ -656,21 +657,27 @@ const interpolateCoord = (a, b, fac) => {
 // preserves order
 const edgesToCoords = (verts, edges, cellCoord, cellDims, factors) => {
     // loop through each edge
+    let theseVerts = [];
     for (let i = 0; i < edges.length; i++) { 
         // get verts associated with it
-        let theseVerts = edgeToVertsTable[edges[i]]
+        let connected = edgeToVertsTable[edges[i]]
         // get coords of that vert in index space
         // pass into interpolate coords
         // add to coords list
-        const coord = interpolateCoord(vertCoordTable[theseVerts[0]], vertCoordTable[theseVerts[1]], factors[i]);
+        const coord = interpolateCoord(vertCoordTable[connected[0]], vertCoordTable[connected[1]], factors[i]);
         verts.push(
             coord[0]*cellDims[0]+cellCoord[0],
             coord[1]*cellDims[1]+cellCoord[1],
             coord[2]*cellDims[2]+cellCoord[2],
-            )
+        )
+        theseVerts.push(
+            coord[0]*cellDims[0]+cellCoord[0],
+            coord[1]*cellDims[1]+cellCoord[1],
+            coord[2]*cellDims[2]+cellCoord[2],
+        )
         //coords.push(...VecMath.vecAdd(VecMath.vecMult(interpolateCoord(a, b, factors[i]), cellDims), cellCoord));
     }
-    //return coords;
+    return theseVerts;
 }
 
 const getVertexNormals = (normals, edges, coord, dataObj, factors) => {
@@ -691,18 +698,21 @@ const getVertexNormals = (normals, edges, coord, dataObj, factors) => {
     return normals;
 }
 
-const  getVertexNormalsFlat = (verts, indices, cellCoord) => {
-    let normals = new Float32Array(verts.length);
+const getVertexNormalsFlat = (normals, verts, indices) => {
+    const normLen = normals.length;
     let a = vec3.create();
     let b = vec3.create();
     for (let i = 0; i < indices.length; i += 3) {
+        // index in verts of the start of each vertex
         const i0 = 3*indices[i];
         const i1 = 3*indices[i+1];
         const i2 = 3*indices[i+2];
+        // coord of each vertex
         const v0 = [verts[i0], verts[i0 + 1], verts[i0 + 2]];
         const v1 = [verts[i1], verts[i1 + 1], verts[i1 + 2]];
         const v2 = [verts[i2], verts[i2 + 1], verts[i2 + 2]];
 
+        // 2 sides of the tri
         vec3.sub(a, v1, v0);
         vec3.sub(b, v2, v0);
 
@@ -711,15 +721,15 @@ const  getVertexNormalsFlat = (verts, indices, cellCoord) => {
 
         if(n[0] != 0 && n[1] != 0 && n[2] != 0) {
         
-            normals[i0] = n[0];
-            normals[i0+1] = n[1];
-            normals[i0+2] = n[2];
-            normals[i1] = n[0];
-            normals[i1+1] = n[1];
-            normals[i1+2] = n[2];
-            normals[i2] = n[0];
-            normals[i2+1] = n[1];
-            normals[i2+2] = n[2];
+            normals[i0 + normLen] = n[0];
+            normals[i0+1  + normLen] = n[1];
+            normals[i0+2  + normLen] = n[2];
+            normals[i1  + normLen] = n[0];
+            normals[i1+1  + normLen] = n[1];
+            normals[i1+2  + normLen] = n[2];
+            normals[i2  + normLen] = n[0];
+            normals[i2+1  + normLen] = n[1];
+            normals[i2+2  + normLen] = n[2];
 
         }
     }

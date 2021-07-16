@@ -78,6 +78,6 @@ function Camera() {
         this.mouseDown = false;
     }
     this.changeDist = function(d) {
-        this.setDist(Math.max(0.1, this.dist + (d)/100));
+        this.setDist(Math.max(0.1, this.dist + (d)/10));
     }
 }
