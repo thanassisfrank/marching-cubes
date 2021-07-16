@@ -1,6 +1,6 @@
 // main.js
 
-import {get, create, setupCanvasDims, repositionCanvas, getFirstOfClass, toRads} from "./utils.js";
+import {get, create, setupCanvasDims, repositionCanvas, getFirstOfClass, toRads, sin30} from "./utils.js";
 import {Data} from "./data.js";
 import {Camera} from "./camera.js";
 import {mat4} from 'https://cdn.skypack.dev/gl-matrix';
@@ -37,9 +37,14 @@ function main() {
     var mesh1 = new Mesh();
 
     //data1.generateData(15, 15, 15, (i, j, k) => Math.cos(Math.sqrt(Math.pow(i, 2) + Math.pow(j, 2) + Math.pow(k, 2))/4) + 1);
-    data1.generateData(15, 15, 15, (i, j, k) => Math.sqrt(Math.pow(i-7, 2) + Math.pow(j-7, 2) + Math.pow(k-7, 2))/5 + Math.random()/7);
+    //data1.generateData(15, 15, 15, (i, j, k) => Math.sqrt(Math.pow(i-7, 2) + Math.pow(j-7, 2) + Math.pow(k-7, 2))/5);// + Math.random()/7);
     //data1.generateData(20, 20, 20, (i, j, k) => Math.random());
     //data1.generateData(2, 2, 2, (i, j, k) => i + j + k);
+    //data1.generateData(50, 50, 50, (i, j, k) => k/10 + Math.random()/5);
+    data1.generateData(51, 51, 51, (i, j, k) => {
+        const dist = Math.sqrt(Math.pow((i-25)/3, 2) + Math.pow((j-25)/3, 2));
+        return k-Math.cos(dist)*0.5*k;
+    });
 
     camera1.setDist(1.2*data1.maxSize);
 
@@ -74,12 +79,6 @@ function main() {
                 const dt = Date.now()-start;
                 console.log("Speed for " + view.views[viewId].mesh.verts.length + " verts: " + String(dt/amount) + "ms")
                 //console.log("Speed for " + data.data.length + " points: " + String(dt/amount) + "ms")
-                break;
-            case "ArrowLeft":
-                //delete last view
-                break;
-            case "ArrowRight":
-                // add new view
                 break;
         }
     }

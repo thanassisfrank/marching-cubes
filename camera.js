@@ -10,8 +10,9 @@ function Camera() {
     this.phi = 0;
     this.fov = 80;
     this.modelMat;
+    this.modelViewMat;
     this.projMat;
-    this.projMatValid = false;
+    this.modelViewMatValid = false;
     this.mouseStart = [0, 0];
     this.startTh = 0;
     this.startPhi = 0;
@@ -19,43 +20,45 @@ function Camera() {
     this.setModelMat = function(mat) {
         this.modelMat = mat;
     }
-    this.getProjMat = function() {
-        if (!this.projMatValid) {
-            let projMat = mat4.create();
-            let lookMat = mat4.create();
+    this.setProjMat = function() {
+        let projMat = mat4.create();
+        const aspect = 1;
+        const zNear = 0.1;
+        const zFar = 100.0;
+    
+        mat4.perspective(projMat,toRads(this.fov),aspect,zNear,zFar);
+        this.projMat = projMat;
+    }
+    this.getModelViewMat = function() {
+        if (!this.modelViewMatValid) {
+            this.modelViewMat = mat4.create();
+            let viewMat = mat4.create();
         
             const eye = [
                 this.dist*Math.sin(toRads(-this.th))*Math.cos(toRads(this.phi)), 
                 -this.dist*Math.sin(toRads(this.phi)), 
                 this.dist*Math.cos(toRads(-this.th))*Math.cos(toRads(this.phi))
             ]
-            mat4.lookAt(lookMat, eye, [0, 0, 0], [0, 1, 0])
+            mat4.lookAt(viewMat, eye, [0, 0, 0], [0, 1, 0])
             
-            const aspect = 1;
-            const zNear = 0.1;
-            const zFar = 100.0;
-        
-            mat4.perspective(projMat,toRads(this.fov),aspect,zNear,zFar);
-            //mat4.ortho(projMat, -size, size, -size, size, -size, size);
-            mat4.multiply(projMat, projMat, lookMat);
+            mat4.multiply(this.modelViewMat, viewMat, this.modelMat);
 
-            this.projMat = projMat;
-            this.projMatValid = true;
+            this.modelViewMatValid = true;
         };
     
-        return this.projMat;
+        return this.modelViewMat;
     }
     this.setDist = function(dist) {
         this.dist = dist;
-        this.projMatValid = false;
+        this.modelViewMatValid = false;
     }
     this.setTh = function(th) {
         this.th = th;
-        this.projMatValid = false;
+        this.modelViewMatValid = false;
     }
     this.setPhi = function(phi) {
         this.phi = phi;
-        this.projMatValid = false;
+        this.modelViewMatValid = false;
     }
     this.startMove = function(x, y) {
         this.mouseStart = [x, y];

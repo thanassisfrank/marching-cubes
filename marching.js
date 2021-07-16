@@ -589,9 +589,11 @@ var generateMesh = function(dataObj, meshObj, threshold) {
                     code |= (val > threshold) << l;
                     cellVals[c[0] + 2*c[1] + 4*c[2]] = val;
                 }
+                
+                if (code == 0 || code == 255) continue;
 
                 // gets appropriate active edges
-                let edges = edgeTable[code];
+                const edges = edgeTable[code];
 
                 //calculate factors for each edge (distance from 1st connected vertex in index space)
                 const factors = edgesToFactors(edges, cellVals, threshold);
@@ -618,7 +620,7 @@ var generateMesh = function(dataObj, meshObj, threshold) {
     //console.log("mesh generation took: ", Date.now() - start);
 }
 
-var edgesToFactors = (edges, cellVals, threshold) => {
+const edgesToFactors = (edges, cellVals, threshold) => {
     let factors = [];
     for (let i = 0; i < edges.length; i++) { 
         let verts = edgeToVertsTable[edges[i]]
@@ -635,7 +637,7 @@ var edgesToFactors = (edges, cellVals, threshold) => {
 }
 
 // interpolates between 2 coords
-var interpolateCoord = (a, b, fac) => {
+const interpolateCoord = (a, b, fac) => {
     let final = []
     for (let i = 0; i < a.length; i++) {
         final[i] = (a[i]*(1-fac) + b[i]*(fac))
@@ -645,7 +647,7 @@ var interpolateCoord = (a, b, fac) => {
 
 // cellCoord is coord of 0 vertex in cell
 // preserves order
-var edgesToCoords = (edges, cellCoord, cellDims, factors) => {
+const edgesToCoords = (edges, cellCoord, cellDims, factors) => {
     let coords = [];
     // loop through each edge
     for (let i = 0; i < edges.length; i++) { 
@@ -657,12 +659,18 @@ var edgesToCoords = (edges, cellCoord, cellDims, factors) => {
         let b = vertCoordTable[verts[1]];
         // pass into interpolate coords
         // add to coords list
-        coords.push(...VecMath.vecAdd(VecMath.vecMult(interpolateCoord(a, b, factors[i]), cellDims), cellCoord));
+        const coord = interpolateCoord(a, b, factors[i]);
+        coords.push(
+            coord[0]*cellDims[0]+cellCoord[0],
+            coord[1]*cellDims[1]+cellCoord[1],
+            coord[2]*cellDims[2]+cellCoord[2],
+            )
+        //coords.push(...VecMath.vecAdd(VecMath.vecMult(interpolateCoord(a, b, factors[i]), cellDims), cellCoord));
     }
     return coords;
 }
 
-function getVertexNormals(edges, coord, dataObj, factors) {
+const getVertexNormals = (edges, coord, dataObj, factors) => {
     if (!dataObj.normalsPopulated) dataObj.generateNormals();
     let normals = [];
     // loop through each edge
@@ -681,8 +689,10 @@ function getVertexNormals(edges, coord, dataObj, factors) {
     return normals;
 }
 
-function getVertexNormalsFlat(verts, indices, cellCoord) {
+const  getVertexNormalsFlat = (verts, indices, cellCoord) => {
     let normals = new Float32Array(verts.length);
+    let a = vec3.create();
+    let b = vec3.create();
     for (let i = 0; i < indices.length; i += 3) {
         const i0 = 3*indices[i];
         const i1 = 3*indices[i+1];
@@ -691,8 +701,6 @@ function getVertexNormalsFlat(verts, indices, cellCoord) {
         const v1 = [verts[i1], verts[i1 + 1], verts[i1 + 2]];
         const v2 = [verts[i2], verts[i2 + 1], verts[i2 + 2]];
 
-        let a = vec3.create();
-        let b = vec3.create();
         vec3.sub(a, v1, v0);
         vec3.sub(b, v2, v0);
 
@@ -700,7 +708,6 @@ function getVertexNormalsFlat(verts, indices, cellCoord) {
         vec3.cross(n, a, b)
 
         if(n[0] != 0 && n[1] != 0 && n[2] != 0) {
-            vec3.normalize(n, n);
         
             normals[i0] = n[0];
             normals[i0+1] = n[1];

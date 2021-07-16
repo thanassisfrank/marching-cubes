@@ -20,36 +20,61 @@ const vsSource = `
     attribute vec4 aVertexPosition;
     attribute vec3 vertNormal;
 
-    uniform mat4 uModelViewMatrix;
-    uniform mat4 uProjectionMatrix;
+    uniform mat4 uMVMat;
+    uniform mat4 uPMat;
 
-    varying vec3 normal;
+    varying vec3 vNormal;
+    varying vec3 vEye;
 
     void main() {
-        gl_Position = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
-        normal = vertNormal;
+        vec4 vertex = uMVMat * aVertexPosition;
+        vEye = -vec3(vertex.xyz);
+        vNormal = vertNormal;
+        gl_Position = uPMat * vertex;
+        
     }
 `;
 
 const fsSource = `
     precision mediump float;
 
-    varying vec3 normal;
+    varying vec3 vNormal;
+    varying vec3 vEye;
 
-    vec3 light1 = normalize(vec3(0.0, 0.0, -1.0));
-    //vec3 light2 = normalize(vec3(0.0, 0.0, 0.0));
+    struct Light {
+        vec3 dir;
+        vec3 color;
+    };
+
+    Light light1 = Light(normalize(vec3(0.0, 0.0, -1.0)), vec3(1.0));
     vec3 color = vec3(0.29, 0.54, 0.95);
+    float shininess = 50.0;
 
     void main() {
-        float light = max(dot(-normal, light1), 0.0) + 0.1;
-        light *= 1.0;//sign(light);
-        gl_FragColor = vec4(color*light, 1.0);
+        vec3 E = normalize(vEye);
+        vec3 N = normalize(vNormal);
+        float diffuseFac = max(dot(-N, light1.dir), 0.0);
+        vec3 diffuse;
+        vec3 specular;
+        vec3 reflected;
+
+        if (diffuseFac > 0.0) {
+            diffuse = color*light1.color*diffuseFac;
+
+            reflected = reflect(light1.dir, N);
+            float specularFac = pow(max(dot(reflected, E), 0.0), shininess);
+            specular = color*light1.color*specularFac;
+        }
+
+        
+        gl_FragColor = vec4(diffuse + specular, 1.0);
+        //gl_FragColor = vec4(reflected, 1.0);
     }
 `;
 
 
 var setupRenderer = function(canvas) {
-    gl = getCtx(canvas, "webgl");
+    gl = getCtx(canvas, "webgl2");
     if (gl == null) {
         console.log("webgl not supported");
         return;
@@ -61,6 +86,10 @@ var setupRenderer = function(canvas) {
     gl.depthFunc(gl.LESS);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.SCISSOR_TEST);
+    const index32 = gl.getExtension("OES_element_index_uint");
+    if (index32 == null) {
+        console.log("32 bit indices not supported");
+    }
 
     shaderProgram = initShaderProgram(gl, vsSource, fsSource)
     if (shaderProgram === null) {
@@ -74,8 +103,8 @@ var setupRenderer = function(canvas) {
           normal: gl.getAttribLocation(shaderProgram, "vertNormal")
         },
         uniformLocations: {
-          projMat: gl.getUniformLocation(shaderProgram, "uProjectionMatrix"),
-          modelMat: gl.getUniformLocation(shaderProgram, "uModelViewMatrix"),
+          projMat: gl.getUniformLocation(shaderProgram, "uPMat"),
+          modelViewMat: gl.getUniformLocation(shaderProgram, "uMVMat"),
         },
     };
 
@@ -135,7 +164,7 @@ function updateRendererState(gl, mesh) {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(mesh.normals), gl.DYNAMIC_DRAW);
 
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers["a"].indices);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(mesh.indices), gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(mesh.indices), gl.DYNAMIC_DRAW);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
     //gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
@@ -190,7 +219,7 @@ function updateBuffers(mesh, id) {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(mesh.normals), gl.DYNAMIC_DRAW);
 
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers[id].indices);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(mesh.indices), gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(mesh.indices), gl.DYNAMIC_DRAW);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
@@ -211,7 +240,7 @@ function clearScreen(gl) {
 }
 
 // for rendering a particular set of buffers associated with a view
-var renderView = function(gl, projMat, modelMat, box, indicesNum, id) {
+var renderView = function(gl, projMat, modelViewMat, box, indicesNum, id) {
     if (!buffers[id]) return;
     gl.viewport(box.left, box.bottom, box.width, box.height);
     gl.scissor(box.left, box.bottom, box.width, box.height);
@@ -223,9 +252,9 @@ var renderView = function(gl, projMat, modelMat, box, indicesNum, id) {
         projMat
     );
     gl.uniformMatrix4fv(
-        programInfo.uniformLocations.modelMat,
+        programInfo.uniformLocations.modelViewMat,
         false,
-        modelMat
+        modelViewMat
     );
 
     gl.bindBuffer(gl.ARRAY_BUFFER, buffers[id].position);
@@ -237,7 +266,7 @@ var renderView = function(gl, projMat, modelMat, box, indicesNum, id) {
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers[id].indices); 
       
 
-    gl.drawElements(gl.TRIANGLES, indicesNum, gl.UNSIGNED_SHORT, 0);
+    gl.drawElements(gl.TRIANGLES, indicesNum, gl.UNSIGNED_INT, 0);
 
     //gl.bindBuffer(gl.ARRAY_BUFFER, null);
     //gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);

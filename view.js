@@ -46,6 +46,7 @@ var view = {
         mat4.translate(modelMat, modelMat, VecMath.scalMult(-1, data.midPoint));
 
         camera.setModelMat(modelMat);
+        camera.setProjMat();
 
         // generate id
         const id = this.newId();
@@ -66,7 +67,7 @@ var view = {
         var slider = create("INPUT");
         slider.type = "range";
         slider.min = 0;
-        slider.max = 5;
+        slider.max = 20;
         slider.value = this.initialThreshold;
         slider.step = 0.05;
         var closeBtn = create("BUTTON");
@@ -128,12 +129,19 @@ var view = {
         this.data = data;
         this.mesh = mesh;
         this.threshold = threshold;
+        this.updating = false;
         this.box = {};
         this.init = function() {
             this.bufferId = createBuffers();
             this.updateThreshold(this.threshold);
         }
         this.updateThreshold = function(val) {
+            this.updating = true;
+            this.threshold = val;
+            this.generateMesh();
+            this.updateBuffers();
+            this.updating = false;
+            this.updating = true;
             this.threshold = val;
             this.generateMesh();
             this.updateBuffers();
@@ -165,7 +173,7 @@ var view = {
             // call the function to render this view
             // find place for model mat
             // find place for indices length
-            renderView(gl, this.camera.getProjMat(), this.camera.modelMat, this.getBox(), this.mesh.indices.length, this.bufferId)
+            renderView(gl, this.camera.projMat, this.camera.getModelViewMat(), this.getBox(), this.mesh.indices.length, this.bufferId)
         }
         this.delete = function() {
             this.getViewContainer().remove();

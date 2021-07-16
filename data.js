@@ -65,6 +65,9 @@ function Data() {
         }
         this.normalsPopulated = true;
     };
+    
+    // returns normal vector that is not normalised
+    // normalisation step is done by the fragment shader
     this.getDataPointNormal = function(i, j, k, n) {
         let dx, dy, dz;
         const thisVal = this.index(i, j, k);
@@ -100,6 +103,6 @@ function Data() {
         }
         //console.log(VecMath.normalise([dx, dy, dz]));
         vec3.set(n, dx, dy, dz);
-        vec3.normalize(n, n);
+        //vec3.normalize(n, n);
     };
 }
