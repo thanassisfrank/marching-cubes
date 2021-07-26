@@ -47,7 +47,7 @@ const fsSource = `
     };
 
     Light light1 = Light(normalize(vec3(0.0, 0.0, -1.0)), vec3(1.0));
-    vec3 color = vec3(0.29, 0.54, 0.95);
+    vec3 color = vec3(0.1, 0.7, 0.6);
     float shininess = 200.0;
 
     void main() {
@@ -56,6 +56,7 @@ const fsSource = `
         float diffuseFac = max(dot(-N, light1.dir), 0.0);
         vec3 diffuse;
         vec3 specular;
+        vec3 ambient = color*0.3;
         vec3 reflected;
 
         if (diffuseFac > 0.0) {
@@ -67,7 +68,7 @@ const fsSource = `
         }
 
         
-        gl_FragColor = vec4(diffuse + specular, 1.0);
+        gl_FragColor = vec4(diffuse + specular + ambient, 1.0);
         //gl_FragColor = vec4(reflected, 1.0);
     }
 `;

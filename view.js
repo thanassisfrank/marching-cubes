@@ -6,6 +6,7 @@ import { Data } from "./data.js";
 import { Mesh } from "./mesh.js";
 import { get, create, toRads } from "./utils.js";
 import { generateMesh } from "./marching.js";
+import { generateMeshWasm } from "./marchingWasm.js";
 import { VecMath } from "./VecMath.js";
 import {mat4} from 'https://cdn.skypack.dev/gl-matrix';
 import {createBuffers, updateBuffers, deleteBuffers, clearScreen, renderView} from "./webglRender.js";
@@ -136,7 +137,7 @@ var view = {
             this.updateThreshold(this.threshold);
         }
         this.updateThreshold = function(val) {
-            if (this.data.initialised) {
+            if (this.data.initialised && !this.updating) {
                 this.updating = true;
                 this.threshold = val;
                 this.generateMesh();
@@ -145,7 +146,8 @@ var view = {
             };
         }
         this.generateMesh = function() {
-            generateMesh(this.data, this.mesh, this.threshold)
+            //generateMesh(this.data, this.mesh, this.threshold);
+            generateMeshWasm(this.data, this.mesh, this.threshold);
         }
         this.updateBuffers = function() {
             updateBuffers(this.mesh, this.bufferId);
@@ -171,7 +173,9 @@ var view = {
             // call the function to render this view
             // find place for model mat
             // find place for indices length
-            renderView(gl, this.camera.projMat, this.camera.getModelViewMat(), this.getBox(), this.mesh.indices.length, this.bufferId)
+            if (this.data.initialised) {
+                renderView(gl, this.camera.projMat, this.camera.getModelViewMat(), this.getBox(), this.mesh.indices.length, this.bufferId);
+            };
         }
         this.delete = function() {
             this.getViewContainer().remove();

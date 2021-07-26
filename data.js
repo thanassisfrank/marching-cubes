@@ -37,6 +37,8 @@ function Data() {
         this.size = [x, y, z];
         this.cellsCount = (x-1)*(y-1)*(z-1);
         this.initialised = true;
+        console.log("initialised");
+        console.log(this);
     }
     this.generateData = function(x, y, z, f) {
         
@@ -52,9 +54,39 @@ function Data() {
         this.initialise(x, y, z);
     };
     this.fromFile = function(src, x, y, z) {
-        fetch(src).then(() => {
+        var that = this;
+        this.data = new Uint8Array(x * y * z);
+        var finished = new Promise(resolve => {
+            fetch(src).then((res) => {
+                if (res.ok) {
+                    let currIndex = 0
+                    var reader = res.body.getReader();
+                    const processData = ({ done, value }) => {
+                        
+                        if (done) {
+                            console.log("Stream complete");
+                            resolve(true);
+                            return;
+                        }
+                        
+                        that.data.set(value, currIndex);
 
-        })
+                        currIndex += value.length;
+                    
+                        // Read some more, and call this function again
+                        return reader.read().then(processData);
+                    }
+
+                    reader.read().then(processData);
+                    that.initialise(x, y, z);
+                } else {
+                    console.log(res.status)
+                    resolve(false);
+                }
+            });
+        });
+
+        return finished;
     }
     this.setCellSize = function(size) {
         this.cellSize = size;
@@ -112,7 +144,7 @@ function Data() {
             dz = ((this.index(i, j, k+1) - thisVal)/(this.cellSize[2]))
         }
         //console.log(VecMath.normalise([dx, dy, dz]));
-        vec3.set(n, dx, dy, dz);
+        vec3.set(n, -dx, -dy, -dz);
         //vec3.normalize(n, n);
     };
 }

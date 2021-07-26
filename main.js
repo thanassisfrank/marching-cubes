@@ -1,6 +1,7 @@
 // main.js
 
 import {get, setupCanvasDims, repositionCanvas} from "./utils.js";
+import {setupWasm} from "./marchingWasm.js";
 import {Data} from "./data.js";
 import {Camera} from "./camera.js";
 import {setupRenderer} from "./webglRender.js";
@@ -9,7 +10,7 @@ import { view } from "./view.js";
 
 document.body.onload = main;
 
-function main() {
+async function main() {
     var canvas = get("c");
     setupCanvasDims(canvas);
 
@@ -36,12 +37,17 @@ function main() {
     //data1.generateData(15, 15, 15, (i, j, k) => Math.cos(Math.sqrt(Math.pow(i, 2) + Math.pow(j, 2) + Math.pow(k, 2))/4) + 1);
     //data1.generateData(15, 15, 15, (i, j, k) => Math.sqrt(Math.pow(i-7, 2) + Math.pow(j-7, 2) + Math.pow(k-7, 2))/5);
     //data1.generateData(20, 20, 20, (i, j, k) => Math.random());
-    //data1.generateData(2, 2, 2, (i, j, k) => i + j + k);
-    //data1.generateData(50, 50, 50, (i, j, k) => k/10 + Math.random()/5);
+    //data1.generateData(4, 4, 4, (i, j, k) => i + j + k);
+    //data1.generateData(20, 20, 10, (i, j, k) => k/10 + Math.random()/5);
     data1.generateData(201, 201, 50, (i, j, k) => {
         const dist = Math.sqrt(Math.pow((i-100)/3, 2) + Math.pow((j-100)/3, 2));
         return k-Math.cos(dist)*0.5*k*Math.pow(1.03, -dist);
     });
+
+    //const success = await data1.fromFile("./data/engine_256x256x128_uint8.raw", 128, 256, 256);
+    //const success = await data1.fromFile("./data/lobster_301x324x56_uint8.raw", 56, 324, 301);
+
+    await setupWasm(data1);
 
     camera1.setDist(1.2*data1.maxSize);
 
@@ -80,7 +86,6 @@ function main() {
         }
     }
     
-
     var renderLoop = () => {
         view.render(ctx);
         requestAnimationFrame(renderLoop)
