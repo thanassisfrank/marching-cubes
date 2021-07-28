@@ -9,7 +9,7 @@ import { generateMesh } from "./marching.js";
 import { generateMeshWasm } from "./marchingWasm.js";
 import { VecMath } from "./VecMath.js";
 import {mat4} from 'https://cdn.skypack.dev/gl-matrix';
-import {createBuffers, updateBuffers, deleteBuffers, clearScreen, renderView} from "./webglRender.js";
+import {createBuffers, updateBuffers, deleteBuffers, clearScreen, renderView} from "./render.js";
 
 export {view};
 
@@ -17,7 +17,7 @@ var view = {
     maxViews: 30,
     // an object to hold all views that have been created
     views: {},
-    initialThreshold: 0.5,
+    initialThreshold: 10,
     moreViewsAllowed: function() {
         return Object.keys(this.views).length < this.maxViews;
     },
@@ -68,7 +68,7 @@ var view = {
         var slider = create("INPUT");
         slider.type = "range";
         slider.min = 0;
-        slider.max = 20;
+        slider.max = 255;
         slider.value = this.initialThreshold;
         slider.step = 0.05;
         var closeBtn = create("BUTTON");
@@ -137,12 +137,15 @@ var view = {
             this.updateThreshold(this.threshold);
         }
         this.updateThreshold = function(val) {
-            if (this.data.initialised && !this.updating) {
-                this.updating = true;
-                this.threshold = val;
-                this.generateMesh();
-                this.updateBuffers();
-                this.updating = false;
+            if (this.data.initialised ){
+                this.threshold
+                if(!this.updating) {
+                    this.updating = true;
+                    this.threshold = val;
+                    this.generateMesh();
+                    this.updateBuffers();
+                    this.updating = false;
+                };
             };
         }
         this.generateMesh = function() {
@@ -163,6 +166,7 @@ var view = {
             var rect = this.getFrameElem().getBoundingClientRect();
             var canvasRect = get("c").getBoundingClientRect();
             this.box.left = rect.left - canvasRect.left// + window.scrollX;
+            this.box.top = rect.top - canvasRect.top;
             this.box.bottom = window.innerHeight + canvasRect.top - rect.bottom// - window.scrollY;
             this.box.width = rect.width;
             this.box.height = rect.width;

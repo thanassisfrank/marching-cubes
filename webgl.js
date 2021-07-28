@@ -48,12 +48,19 @@ const fsSource = `
 
     Light light1 = Light(normalize(vec3(0.0, 0.0, -1.0)), vec3(1.0));
     vec3 color = vec3(0.1, 0.7, 0.6);
-    float shininess = 200.0;
+    vec3 specColor = vec3(1.0);
+    float shininess = 150.0;
+
+    float quant(float val, float step) {
+        return step*floor(val/step);
+    }
 
     void main() {
         vec3 E = normalize(vEye);
         vec3 N = normalize(vNormal);
+        
         float diffuseFac = max(dot(-N, light1.dir), 0.0);
+        
         vec3 diffuse;
         vec3 specular;
         vec3 ambient = color*0.3;
@@ -64,7 +71,7 @@ const fsSource = `
 
             reflected = reflect(light1.dir, N);
             float specularFac = pow(max(dot(reflected, E), 0.0), shininess);
-            specular = color*light1.color*specularFac;
+            specular = specColor*light1.color*specularFac;
         }
 
         
@@ -210,13 +217,13 @@ function createBuffers() {
 
 function updateBuffers(mesh, id) {
     gl.bindBuffer(gl.ARRAY_BUFFER, buffers[id].position);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(mesh.verts), gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, mesh.verts, gl.DYNAMIC_DRAW);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, buffers[id].normals);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(mesh.normals), gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, mesh.normals, gl.DYNAMIC_DRAW);
 
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers[id].indices);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(mesh.indices), gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.DYNAMIC_DRAW);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);

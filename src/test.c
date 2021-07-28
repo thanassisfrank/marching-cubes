@@ -554,18 +554,25 @@ int triTable[256][15] = {
 
 float* data;
 int dataLength;
+int sizeX;
+int sizeY;
+int sizeZ;
 int* codes;
+int codesCount;
 float* verts;
 int vertsNum;
 float* normals;
 int* indices;
 int indicesNum;
 
-// size is in bytes
-// therefore dataLength is too
-float* EMSCRIPTEN_KEEPALIVE assignDataLocation(int dataPoints) {
-    dataLength = dataPoints;
-    data = malloc(dataPoints * sizeof(float));
+
+// data length is the number of dataPoints
+float* EMSCRIPTEN_KEEPALIVE assignDataLocation(int x, int y, int z) {
+    dataLength = x*y*z;
+    sizeX = x;
+    sizeY = y;
+    sizeZ = z;
+    data = malloc(dataLength * sizeof(float));
     return data;
 }
 
@@ -727,13 +734,25 @@ void addVertsAndNorms(float* verts, float* normals, int* curr, int code, int x, 
     for (int i = 0; i < 12; i++) {
         if (edges[i] != -1) {
             // add vertex position to vertex list
-            const int* connected = edgeToVertsTable[edges[i]];
+            int connected[2] = {
+                edgeToVertsTable[edges[i]][0],
+                edgeToVertsTable[edges[i]][1],
+            };
 
-            int* a = vertCoordTable[connected[0]];
-            int* b = vertCoordTable[connected[1]];
+            int a[3] = {
+                vertCoordTable[connected[0]][0],
+                vertCoordTable[connected[0]][1],
+                vertCoordTable[connected[0]][2]
+            };
+            int b[3] = {
+                vertCoordTable[connected[1]][0],
+                vertCoordTable[connected[1]][1],
+                vertCoordTable[connected[1]][2]
+            };
 
             float va = data[Y*Z*(a[0] + x) + Z*(a[1] + y) + a[2] + z];
             float vb = data[Y*Z*(b[0] + x) + Z*(b[1] + y) + b[2] + z];
+            
             float fac = (threshold-va)/(vb-va);
 
             verts[3*(*curr)] = (float)a[0]*(1-fac) + (float)b[0]*fac + x;
@@ -776,11 +795,12 @@ void addIndices(int* indices, int* currInd, int currVert, int code) {
     }
 }
 
-void getCodes(int* codes, float* data, float threshold, int x, int y, int z) {
+void getCodes(float threshold) {
     int index;
-    int X = x-1;
-    int Y = y-1;
-    int Z = z-1;
+    int X = sizeX-1;
+    int Y = sizeY-1;
+    int Z = sizeZ-1;
+    codesCount = X*Y*Z;
     for (int i = 0; i < X; i++) {
         for (int j = 0; j < Y; j++) {
             for (int k = 0; k < Z; k++) {
@@ -788,7 +808,7 @@ void getCodes(int* codes, float* data, float threshold, int x, int y, int z) {
                 for (int l = 0; l < 8; l++) {
                     int* c = vertCoordTable[l];
                     // indexing data needs full dimensions
-                    index = y * z * (i + c[0]) + z * (j + c[1]) + k + c[2];
+                    index = sizeY * sizeZ * (i + c[0]) + sizeZ * (j + c[1]) + k + c[2];
                     float val = data[index];
                     // indexing codes uses X Y Z (dim - 1)
                     codes[Y * Z * i + Z * j + k] |= (val > threshold) << l;
@@ -798,9 +818,9 @@ void getCodes(int* codes, float* data, float threshold, int x, int y, int z) {
     }
 }
 
-int getVertsCount(int* codes, int length) {
+int getVertsCount() {
     int total = 0;
-    for (int i = 0; i < length; i++) {
+    for (int i = 0; i < codesCount; i++) {
         // loop through each code
         for (int j = 0; j < 12; j++) {
             if (edgeTable[codes[i]][j] != -1) {
@@ -813,9 +833,9 @@ int getVertsCount(int* codes, int length) {
     return total;
 }
 
-int getIndicesCount(int* codes, int length) {
+int getIndicesCount() {
     int total = 0;
-    for (int i = 0; i < length; i++) {
+    for (int i = 0; i < codesCount; i++) {
         // loop through each code
         for (int j = 0; j < 15; j++) {
             if (triTable[codes[i]][j] != -1) {
@@ -828,28 +848,30 @@ int getIndicesCount(int* codes, int length) {
     return total;
 }
 
-// ptr is where the data starts in memory, x, y, z are the sizes
-int EMSCRIPTEN_KEEPALIVE generateMesh(int x, int y, int z, float threshold) {
-    // potentially could reduce space allocated to codes as they are per cell not per point
-    int codesCount = (x - 1) * (y - 1) * (z - 1);  
-    codes = (int*) malloc(codesCount * sizeof(int));
-    getCodes(codes, data, threshold, x, y, z);
 
-    vertsNum = getVertsCount(codes, codesCount);
+// ptr is where the data starts in memory, x, y, z are the sizes
+int EMSCRIPTEN_KEEPALIVE generateMesh(float threshold) {
+    // potentially could reduce space allocated to codes as they are per cell not per point
+    int codesCount = (sizeX - 1) * (sizeY - 1) * (sizeZ - 1);  
+    codes = (int*) malloc(codesCount * sizeof(int));
+    getCodes(threshold);
+
+    vertsNum = getVertsCount();
     verts = (float*) malloc(vertsNum * 3 * sizeof(float));
     
-    indicesNum = getIndicesCount(codes, codesCount);
+    indicesNum = getIndicesCount();
     indices = (int*) malloc(indicesNum * sizeof(int));
 
     normals = (float*) malloc(vertsNum * 3 * sizeof(float));
     
-    int X = x-1;
-    int Y = y-1;
-    int Z = z-1;
+    int X = sizeX-1;
+    int Y = sizeY-1;
+    int Z = sizeZ-1;
     // holds current vertex number in array
     int currVert = 0;
     int currInd = 0;
     int codeIndex = 0;
+
     for (int i = 0; i < X; i++) {
         for (int j = 0; j < Y; j++) {
             for (int k = 0; k < Z; k++) {
@@ -859,12 +881,11 @@ int EMSCRIPTEN_KEEPALIVE generateMesh(int x, int y, int z, float threshold) {
                     continue;
                 }
                 addIndices(indices, &currInd, currVert, codes[codeIndex]);
-                addVertsAndNorms(verts, normals, &currVert, codes[codeIndex], i, j, k, data, x, y, z, threshold);
+                addVertsAndNorms(verts, normals, &currVert, codes[codeIndex], i, j, k, data, sizeX, sizeY, sizeZ, threshold);
                 // calculate indices values
             }
         }
     }
-    //console_log(normals[0]);
     return vertsNum;
 }
 

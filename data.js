@@ -38,7 +38,6 @@ function Data() {
         this.cellsCount = (x-1)*(y-1)*(z-1);
         this.initialised = true;
         console.log("initialised");
-        console.log(this);
     }
     this.generateData = function(x, y, z, f) {
         
