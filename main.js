@@ -41,14 +41,14 @@ async function main() {
     //data1.generateData(20, 20, 20, (i, j, k) => 10*(Math.random()+k));
     //data1.generateData(4, 4, 4, (i, j, k) => i + j + k);
     //data1.generateData(20, 20, 10, (i, j, k) => k/10 + Math.random()/5);
-    // data1.generateData(221, 221, 100, (i, j, k) => {
-    //     const dist = Math.sqrt(Math.pow((i-110)/3, 2) + Math.pow((j-110)/3, 2));
-    //     return k-Math.cos(dist/2)*0.5*k*Math.pow(1.03, -dist);
-    // });
+    data1.generateData(221, 221, 100, (i, j, k) => {
+        const dist = Math.sqrt(Math.pow((i-110)/3, 2) + Math.pow((j-110)/3, 2));
+        return k-Math.cos(dist/2)*0.5*k*Math.pow(1.03, -dist);
+    });
 
     //const success = await data1.fromFile("./data/silicium_98x34x34_uint8.raw", 34, 34, 98);
     //const success = await data1.fromFile("./data/lobster_301x324x56_uint8.raw", 56, 324, 301);
-    const success = await data1.fromFile("./data/engine_256x256x128_uint8.raw", 128, 256, 256);
+    //const success = await data1.fromFile("./data/engine_256x256x128_uint8.raw", 128, 256, 256);
 
     await setupWasm(data1);
 
