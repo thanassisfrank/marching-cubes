@@ -3,7 +3,7 @@
 
 export {setupWasm, generateMeshWasm};
 
-const totalMemory = 268435456;
+const totalMemory = 1073741824;
 const maxMemRatio = 0.9;
 
 var memory;

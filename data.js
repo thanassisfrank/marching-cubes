@@ -52,9 +52,9 @@ function Data() {
         }
         this.initialise(x, y, z);
     };
-    this.fromFile = function(src, x, y, z) {
+    this.fromFile = function(src, DataType, x, y, z) {
         var that = this;
-        this.data = new Uint8Array(x * y * z);
+        this.data = new ArrayBuffer(x * y * z * DataType.BYTES_PER_ELEMENT);
         var finished = new Promise(resolve => {
             fetch(src).then((res) => {
                 if (res.ok) {
@@ -64,11 +64,10 @@ function Data() {
                         
                         if (done) {
                             console.log("Stream complete");
-                            resolve(true);
                             return;
                         }
                         
-                        that.data.set(value, currIndex);
+                        new Uint8Array(that.data, currIndex, value.length).set(value);
 
                         currIndex += value.length;
                     
@@ -76,7 +75,11 @@ function Data() {
                         return reader.read().then(processData);
                     }
 
-                    reader.read().then(processData);
+                    reader.read().then(processData).then(() => {
+                        // convert to correct type
+                        that.data = new DataType(that.data);
+                        resolve(true);
+                    });
                     that.initialise(x, y, z);
                 } else {
                     console.log(res.status)

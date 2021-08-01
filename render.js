@@ -18,6 +18,8 @@ if (navigator.gpu) {
     console.log("webgpu is not supported, using webgl")
 }
 
+function changeModule() {}
+
 function setupRenderer(...args) {
     if (module == "webGPU") {
         return gpu.setupRenderer(...args);

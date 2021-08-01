@@ -68,11 +68,15 @@ const shaderCode = `
             var specularFac : f32 = pow(max(dot(reflected, E), 0.0), shininess);
             specular = specularColor*light1.color*specularFac;
         }
-
         
         return vec4<f32>(diffuse + specular + ambient, 1.0);
     }          
 `
+
+const enumerateCode = ``;
+
+const marchCode = ``;
+
 function getNewBufferId() {
     var id = Object.keys(buffers).length;
         while (buffers.hasOwnProperty(String(id))) {
@@ -90,25 +94,179 @@ const setCombinedVert = (buffView, pos, col) => {
     }
 }
 
-
 // webgpu objects
 var adapter;
 var device;
+
 var renderPipeline;
+var marchPipeline;
+var enumeratePipeline
+
+// specific buffers for each mesh loaded
 var buffers = {};
+// contains matrices for rendering
 var uniformBuffer;
+// contains the data
+var dataBuffer;
+// contains the dimensions of the data
+var sizeBuffer;
+// contains the needed tables
+var tableBuffer;
+// contains the threshold value + #vert + #ind
+var thresholdBuffer;
+
 var bindGroup;
 
-var depthStencilTextureView;
+// incomplete
+function setupMarch(dataObj) {
 
+    // create the enumaeration and marching cubes pipelines
+    enumeratePipeline = createEnumeratePipeline();
+    marchPipeline = createMarchPipeline();
+
+    // load the constants (data, dimensions, tables) onto gpu
+    dataBuffer = createFilledBuffer("f32", dataObj.data, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
+    sizeBuffer = createFilledBuffer("u32", dataObj.size, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
+    
+
+    thresholdBuffer = device.createBuffer({
+        size: Float32Array.BYTES_PER_ELEMENT + Uint32Array.BYTES_PER_ELEMENT*2,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+    }); 
+}
+
+function createConstantsBindGroupLayout () {
+    return  device.createBindGroupLayout({
+        entries: [
+            // input data
+            {
+                binding: 0,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "uniform",
+                }
+            },
+            // dimensions of dataset
+            {
+                binding: 1,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "uniform",
+                }
+            },
+            // tables
+            {
+                binding: 2,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "uniform",
+                }
+            },
+
+        ]
+    });
+}
+
+function createEnumeratePipeline () {
+    const shaderModule = device.createShaderModule({
+        code: enumerateCode
+    });
+
+    // first bind group is for the constant data (data, dimensions)
+    var bindGroupLayout0 = createConstantsBindGroupLayout();
+
+    // second is for holding threshold + vert + indices number
+    var bindGroupLayout1 = device.createBindGroupLayout({
+        entries: [
+            {
+                binding: 0,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "storage",
+                }
+            }
+        ]
+    });
+
+    var pipelineLayout = device.createPipelineLayout({bindGroupLayouts: [bindGroupLayout0, bindGroupLayout1]});
+
+    return device.createComputePipeline({
+        layout: pipelineLayout,
+        compute: {
+            module: shaderModule,
+            entryPoint: "main"
+        }
+    });
+}
+
+function createMarchPipeline () {
+    const shaderModule = device.createShaderModule({
+        code: marchCode
+    });
+
+    // first bind group is for the constant data (data, dimensions)
+    var bindGroupLayout0 = createConstantsBindGroupLayout();
+
+    // second is for writing vert pos, norm + indices
+    var bindGroupLayout1 = device.createBindGroupLayout({
+        entries: [
+            {
+                binding: 0,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "storage",
+                }
+            },
+            {
+                binding: 1,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "storage",
+                }
+            },
+            {
+                binding: 2,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "storage",
+                }
+            }
+        ]
+    });
+
+    var pipelineLayout = device.createPipelineLayout({bindGroupLayouts: [bindGroupLayout0, bindGroupLayout1]});
+
+    return device.createComputePipeline({
+        layout: pipelineLayout,
+        compute: {
+            module: shaderModule,
+            entryPoint: "main"
+        }
+    });
+}
+
+// incomplete
+function march(threshold) {
+    //var commandEncoder = await device.createCommandEncoder();
+    // begin enumerate pass
+    // bind constants
+    // bind threshold group
+    // dispatch enumerate pass
+
+    // get #verts and #indices
+    // allocate vert, indices, normal buffers in bind group
+    
+    // begin march pass
+    // bing constants
+    // bind threshold
+    // bind vert, normal, indices
+    // dispatch march pass
+
+}
+
+// rendering functions ====================================================================
 
 async function setupRenderer(canvas) {
-    if (!navigator.gpu) {
-        console.error("webgpu is not supported")
-        return;
-    }
-    console.log("webgpu is supported yay!");
-
     adapter = await navigator.gpu.requestAdapter();
     device = await adapter.requestDevice();
 
@@ -120,6 +278,29 @@ async function setupRenderer(canvas) {
         format: 'bgra8unorm'
     });
 
+    // TODO: seperate pipeline for rendering views and copying to main texture
+
+    renderPipeline = createRenderPipeline();
+
+    uniformBuffer = device.createBuffer({
+        size: 16*2*Float32Array.BYTES_PER_ELEMENT,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+    
+    bindGroup = device.createBindGroup({
+        layout: renderPipeline.getBindGroupLayout(0),
+        entries: [{
+            binding: 0,
+            resource: {
+                buffer: uniformBuffer
+            }
+        }]
+    });
+
+    return ctx;
+}
+
+function createRenderPipeline() {
     // compile shader code
     const shaderModule = device.createShaderModule({
         code: shaderCode
@@ -183,38 +364,8 @@ async function setupRenderer(canvas) {
         }
     };
 
-    uniformBuffer = device.createBuffer({
-        size: 16*2*Float32Array.BYTES_PER_ELEMENT,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-
     // create the rendering pipeline
-    renderPipeline = device.createRenderPipeline(pipelineDescriptor);
-
-    bindGroup = device.createBindGroup({
-        layout: renderPipeline.getBindGroupLayout(0),
-        entries: [{
-            binding: 0,
-            resource: {
-                buffer: uniformBuffer
-            }
-        }]
-    });
-
-    var depthStencilTexture = device.createTexture({
-        size: {
-          width: ctx.canvas.width,
-          height: ctx.canvas.height,
-          depth: 1
-        },
-        dimension: '2d',
-        format: 'depth32float',
-        usage: GPUTextureUsage.RENDER_ATTACHMENT
-    });
-
-    depthStencilTextureView = depthStencilTexture.createView();
-
-    return ctx;
+    return device.createRenderPipeline(pipelineDescriptor);
 }
 
 function createBuffers() {
@@ -247,6 +398,8 @@ function createFilledBuffer(type, data, usage) {
         new Float32Array(buffer.getMappedRange()).set(data);
     } else if (type == "u32") {
         new Uint32Array(buffer.getMappedRange()).set(data);
+    } else if (type = "u8") {
+        new Uint8Array(buffer.getMappedRange()).set(data);
     }
     
     buffer.unmap();
@@ -280,9 +433,20 @@ function deleteBuffers(id) {
 function clearScreen() {};
 
 async function renderView(ctx, projMat, modelViewMat, box, indicesNum, id) {
-    var commandEncoder = await device.createCommandEncoder();
+    var commandEncoder = device.createCommandEncoder();
     // provide details of load and store part of pass
     // here there is one color output that will be cleared on load
+
+    var depthStencilTexture = device.createTexture({
+        size: {
+          width: ctx.canvas.width,
+          height: ctx.canvas.height,
+          depth: 1
+        },
+        dimension: '2d',
+        format: 'depth32float',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT
+    });
 
     const renderPassDescriptor = {
         colorAttachments: [{
@@ -295,12 +459,14 @@ async function renderView(ctx, projMat, modelViewMat, box, indicesNum, id) {
             depthStoreOp: 'discard',
             stencilLoadValue: 0,
             stencilStoreOp: 'store',
-            view: depthStencilTextureView
+            view: depthStencilTexture.createView()
           }
     };
 
     // write uniforms to buffer
     device.queue.writeBuffer(uniformBuffer, 0, new Float32Array([...projMat, ...modelViewMat]))
+
+    await commandEncoder;
     
     const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
     passEncoder.setViewport(box.left, box.top, box.width, box.height, 0, 1);
@@ -314,4 +480,38 @@ async function renderView(ctx, projMat, modelViewMat, box, indicesNum, id) {
     passEncoder.endPass();
 
     device.queue.submit([commandEncoder.finish()]);
+
+    depthStencilTexture.destroy();
+}
+
+async function renderFrame() {
+    var commandEncoder = device.createCommandEncoder();
+    var canvasTexture = ctx.getCurrentTexture();
+    const renderPassDescriptor = {
+        colorAttachments: [{
+            loadValue: clearColor,
+            storeOp: "store",
+            view: canvasTexture.createView()
+        }]
+    };
+
+    await commandEncoder;
+
+    // need different pass descriptor
+    //const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
+    
+    for (view in Object.keys(/*view storage object*/)) {
+        if (view.frameTexture) {
+            passEncoder.copyTextureToTexture(view.frameTexture, canvasTexture, )
+        }
+    }
+    passEncoder.endPass();
+
+    device.queue.submit([commandEncoder.finish()]);
+
+    // create a textureview for the whole canvas
+    // access the framebuffers for each view
+    // for (view in views) {
+    // device.
+    // copy each 
 }
