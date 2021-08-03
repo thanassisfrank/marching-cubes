@@ -10,6 +10,7 @@ import { generateMeshWasm } from "./marchingWasm.js";
 import { VecMath } from "./VecMath.js";
 import {mat4} from 'https://cdn.skypack.dev/gl-matrix';
 import {createBuffers, updateBuffers, deleteBuffers, clearScreen, renderView} from "./render.js";
+import {march} from "./webGPU.js";
 
 export {view};
 
@@ -136,21 +137,21 @@ var view = {
             this.bufferId = createBuffers();
             this.updateThreshold(this.threshold);
         }
-        this.updateThreshold = function(val) {
-            if (this.data.initialised ){
+        this.updateThreshold = async function(val) {
+            if (this.data.initialised){
                 this.threshold
                 if(!this.updating) {
                     this.updating = true;
                     this.threshold = val;
-                    this.generateMesh();
+                    await this.generateMesh();
                     this.updateBuffers();
                     this.updating = false;
                 };
             };
         }
-        this.generateMesh = function() {
-            //generateMesh(this.data, this.mesh, this.threshold);
+        this.generateMesh = async function() {
             generateMeshWasm(this.data, this.mesh, this.threshold);
+            //await march(this.data, this.mesh, this.threshold);
         }
         this.updateBuffers = function() {
             updateBuffers(this.mesh, this.bufferId);
