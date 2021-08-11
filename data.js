@@ -15,6 +15,7 @@ function Data() {
     this.midPoint = [];
     this.size = [];
     this.cellSize = [1, 1, 1];
+    this.limits = [undefined, undefined];
     this.index = function(i, j, k) {
         return this.data[i * this.size[1] * this.size[2] + j * this.size[2] + k];
     };
@@ -40,16 +41,23 @@ function Data() {
         console.log("initialised");
     }
     this.generateData = function(x, y, z, f) {
-        
+        let v = 0.0;
         this.data = new Float32Array(x * y * z);
         for (let i = 0; i < x; i++) {
             for (let j = 0; j < y; j++) {
                 for (let k = 0; k < z; k++) {
                     // values are clamped to >= 0
-                    this.data[i * y * z + j * z + k] = Math.max(0, f(i, j, k));
+                    v = Math.max(0, f(i, j, k));
+                    this.data[i * y * z + j * z + k] = v;
+                    if (!this.limits[0] || v < this.limits[0]) {
+                        this.limits[0] = v;
+                    } else if (!this.limits[1] || v > this.limits[1]) {
+                        this.limits[1] = v;
+                    }
                 }
             }
         }
+        console.log(this.limits);
         this.initialise(x, y, z);
     };
     this.fromFile = function(src, DataType, x, y, z) {

@@ -755,9 +755,9 @@ void addVertsAndNorms(float* verts, float* normals, int* curr, int code, int x, 
             
             float fac = (threshold-va)/(vb-va);
 
-            verts[3*(*curr)] = (float)a[0]*(1-fac) + (float)b[0]*fac + x;
-            verts[3*(*curr) + 1] = (float)a[1]*(1-fac) + (float)b[1]*fac + y;
-            verts[3*(*curr) + 2] = (float)a[2]*(1-fac) + (float)b[2]*fac + z;
+            verts[3*(*curr)] = (float)a[0]*(1-fac) + (float)b[0]*fac + (float)x;
+            verts[3*(*curr) + 1] = (float)a[1]*(1-fac) + (float)b[1]*fac + (float)y;
+            verts[3*(*curr) + 2] = (float)a[2]*(1-fac) + (float)b[2]*fac + (float)z;
 
             // add vertex normal to normal list
 

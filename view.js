@@ -144,14 +144,14 @@ var view = {
                     this.updating = true;
                     this.threshold = val;
                     await this.generateMesh();
-                    this.updateBuffers();
+                    //this.updateBuffers();
                     this.updating = false;
                 };
             };
         }
         this.generateMesh = async function() {
-            generateMeshWasm(this.data, this.mesh, this.threshold);
-            //await march(this.data, this.mesh, this.threshold);
+            //generateMeshWasm(this.data, this.mesh, this.threshold);
+            await march(this.data, this.mesh, this.threshold, this.bufferId);
         }
         this.updateBuffers = function() {
             updateBuffers(this.mesh, this.bufferId);
@@ -179,7 +179,7 @@ var view = {
             // find place for model mat
             // find place for indices length
             if (this.data.initialised) {
-                renderView(gl, this.camera.projMat, this.camera.getModelViewMat(), this.getBox(), this.mesh.indices.length, this.bufferId);
+                renderView(gl, this.camera.projMat, this.camera.getModelViewMat(), this.getBox(), this.mesh.indicesNum, this.bufferId);
             };
         }
         this.delete = function() {
