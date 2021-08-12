@@ -48,12 +48,12 @@ function Data() {
                 for (let k = 0; k < z; k++) {
                     // values are clamped to >= 0
                     v = Math.max(0, f(i, j, k));
-                    this.data[i * y * z + j * z + k] = v;
                     if (!this.limits[0] || v < this.limits[0]) {
                         this.limits[0] = v;
                     } else if (!this.limits[1] || v > this.limits[1]) {
                         this.limits[1] = v;
-                    }
+                    }this.data[i * y * z + j * z + k] = v;
+                    
                 }
             }
         }
@@ -86,6 +86,7 @@ function Data() {
                     reader.read().then(processData).then(() => {
                         // convert to correct type
                         that.data = new DataType(that.data);
+                        that.getLimits();
                         resolve(true);
                     });
                     that.initialise(x, y, z);
@@ -101,6 +102,17 @@ function Data() {
     this.setCellSize = function(size) {
         this.cellSize = size;
     };
+    this.getLimits = function() {
+        this.limits[undefined, undefined];
+        for(let i = 0; i < this.data.length; i++) {
+            let v = this.data[i];
+            if (!this.limits[0] || v < this.limits[0]) {
+                this.limits[0] = v;
+            } else if (!this.limits[1] || v > this.limits[1]) {
+                this.limits[1] = v;
+            }
+        }
+    }
     this.generateNormals = function() {
         if (!this.normalsInitialised) {
             this.normals = new Float32Array(this.volume * 3);

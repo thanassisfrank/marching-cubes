@@ -8,6 +8,9 @@ import {setupRenderer} from "./render.js";
 import { Mesh } from "./mesh.js";
 import { view } from "./view.js";
 
+import {sweep} from "./analysis.js";
+
+
 import { setupMarch } from "./webGPU.js";
 
 document.body.onload = main;
@@ -38,11 +41,6 @@ async function main() {
     var data1 = new Data();
     var mesh1 = new Mesh();
 
-    var a = [1, 2, 500, 200, 30, 31, 32, 102]
-    var limits = [1, 500];
-    var a_uint8 = Uint8Array.from(a, (elem) => 255*(elem-limits[0])/(limits[1]-limits[0]));
-    console.log(a_uint8);
-
     //data1.generateData(15, 15, 15, (i, j, k) => Math.cos(Math.sqrt(Math.pow(i, 2) + Math.pow(j, 2) + Math.pow(k, 2))/4) + 1);
     //data1.generateData(15, 15, 15, (i, j, k) => Math.sqrt(Math.pow(i-7, 2) + Math.pow(j-7, 2) + Math.pow(k-7, 2))*10);
     //data1.generateData(100, 100, 100, (i, j, k) => 10*(2*Math.random()+k));
@@ -50,9 +48,9 @@ async function main() {
     //data1.generateData(20, 20, 10, (i, j, k) => k/10 + Math.random()/5);
     // data1.generateData(221, 221, 200, (i, j, k) => {
     //     const dist = Math.sqrt(Math.pow((i-110)/3, 2) + Math.pow((j-110)/3, 2));
-    //     return k-Math.cos(dist/2)*0.5*k*Math.pow(1.03, -dist);
+    //     return 250-(k-Math.cos(dist/2)*0.5*k*Math.pow(1.03, -dist));
     // });
-    //data1.generateData(64, 64, 16, (i, j, k) => k*10);
+    //data1.generateData(37, 37, 4, (i, j, k) => k*10);
     // data1.generateData(100, 100, 100, (i, j, k) => {
     //     const ax = 2.1*Math.cos(k/20)*Math.cos(i/10);
     //     const bx = -1.52*Math.cos(i/7);
@@ -64,13 +62,13 @@ async function main() {
     // });
 
     //const success = await data1.fromFile("./data/silicium_98x34x34_uint8.raw", Uint8Array, 34, 34, 98);
-    //const success = await data1.fromFile("./data/lobster_301x324x56_uint8.raw", 56, 324, 301);
+    //const success = await data1.fromFile("./data/lobster_301x324x56_uint8.raw", Uint8Array, 56, 324, 301);
     //const success = await data1.fromFile("./data/engine_256x256x128_uint8.raw", Uint8Array, 128, 256, 256);
-    //const success = await data1.fromFile("./data/tacc_turbulence_256x256x256_float32.raw", Float32Array, 256, 256, 256);
+    const success = await data1.fromFile("./data/tacc_turbulence_256x256x256_float32.raw", Float32Array, 256, 256, 256);
     //const success = await data1.fromFile("./data/magnetic_reconnection_512x512x512_float32.raw", Float32Array, 512, 512, 512);
 
     //await setupWasm(data1);
-    setupMarch(data1);
+    await setupMarch(data1);
 
     camera1.setDist(1.2*data1.maxSize);
 
