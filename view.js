@@ -5,14 +5,20 @@ import { Camera } from "./camera.js";
 import { Data } from "./data.js";
 import { Mesh } from "./mesh.js";
 import { get, create, toRads } from "./utils.js";
-import { generateMesh } from "./marching.js";
-import { generateMeshWasm } from "./marchingWasm.js";
+
 import { VecMath } from "./VecMath.js";
 import {mat4} from 'https://cdn.skypack.dev/gl-matrix';
 import {createBuffers, updateBuffers, deleteBuffers, clearScreen, renderView} from "./render.js";
-import {march} from "./webGPU.js";
+
+// import { generateMesh } from "./marching.js";
+// import { generateMeshWasm } from "./marchingWasm.js";
+// import {march} from "./webGPU.js";
+
+import { march, updateBuffersNeeded } from "./march.js";
 
 export {view};
+
+
 
 var view = {
     maxViews: 30,
@@ -124,6 +130,7 @@ var view = {
             clearScreen(gl);
         }
     },
+    timeLogs: [],
     View: function(id, camera, data, mesh, threshold) {
         this.id = id;
         this.bufferId;
@@ -139,18 +146,19 @@ var view = {
         }
         this.updateThreshold = async function(val) {
             if (this.data.initialised){
-                this.threshold
                 if(!this.updating) {
                     this.updating = true;
                     this.threshold = val;
+                    const t0 = performance.now();
                     await this.generateMesh();
-                    //this.updateBuffers();
+                    const time = performance.now()-t0;
+                    if (updateBuffersNeeded()) this.updateBuffers();
+                    //view.timeLogs.push([this.mesh.verts.length/3 | this.mesh.vertNum, time]);
                     this.updating = false;
                 };
             };
         }
         this.generateMesh = async function() {
-            //generateMeshWasm(this.data, this.mesh, this.threshold);
             await march(this.data, this.mesh, this.threshold, this.bufferId);
         }
         this.updateBuffers = function() {

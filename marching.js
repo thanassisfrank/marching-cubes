@@ -609,6 +609,7 @@ var generateMesh = function(dataObj, meshObj, threshold) {
             }
         }
     }
+    meshObj.indicesNum = meshObj.indices.length;
 }
 
 const getCode = (coord, dataObj, threshold) => {

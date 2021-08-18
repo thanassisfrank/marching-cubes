@@ -4,24 +4,28 @@
 import * as gpu from "./webGPU.js";
 import * as gl from "./webgl.js";
 
-export {setupRenderer, createBuffers, updateBuffers, renderView, deleteBuffers, clearScreen};
+export {setRenderModule, setupRenderer, createBuffers, updateBuffers, renderView, deleteBuffers, clearScreen};
 
 var module;
 
 if (navigator.gpu) {
     // use webGPU
-    module = "webGPU";
+    module = "gpu";
     console.log("webgpu is supported")
 } else {
     // use webgl
-    module = "webgl";
+    module = "gl";
     console.log("webgpu is not supported, using webgl")
+}
+
+function setRenderModule(thisModule) {
+    module = thisModule;
 }
 
 function changeModule() {}
 
 function setupRenderer(...args) {
-    if (module == "webGPU") {
+    if (module == "gpu") {
         return gpu.setupRenderer(...args);
     } else {
         return gl.setupRenderer(...args);
@@ -29,7 +33,7 @@ function setupRenderer(...args) {
 }
 
 function createBuffers(...args) {
-    if (module == "webGPU") {
+    if (module == "gpu") {
         return gpu.createBuffers(...args);
     } else {
         return gl.createBuffers(...args);
@@ -37,7 +41,7 @@ function createBuffers(...args) {
 }
 
 function updateBuffers(...args) {
-    if (module == "webGPU") {
+    if (module == "gpu") {
         return gpu.updateBuffers(...args);
     } else {
         return gl.updateBuffers(...args);
@@ -45,7 +49,7 @@ function updateBuffers(...args) {
 }
 
 function renderView(...args) {
-    if (module == "webGPU") {
+    if (module == "gpu") {
         return gpu.renderView(...args);
     } else {
         return gl.renderView(...args);
@@ -53,7 +57,7 @@ function renderView(...args) {
 }
 
 function deleteBuffers(...args) {
-    if (module == "webGPU") {
+    if (module == "gpu") {
         return gpu.deleteBuffers(...args);
     } else {
         return gl.deleteBuffers(...args);
@@ -61,7 +65,7 @@ function deleteBuffers(...args) {
 }
 
 function clearScreen(...args) {
-    if (module == "webGPU") {
+    if (module == "gpu") {
         return gpu.clearScreen(...args);
     } else {
         return gl.clearScreen(...args);

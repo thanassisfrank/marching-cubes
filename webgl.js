@@ -217,13 +217,13 @@ function createBuffers() {
 
 function updateBuffers(mesh, id) {
     gl.bindBuffer(gl.ARRAY_BUFFER, buffers[id].position);
-    gl.bufferData(gl.ARRAY_BUFFER, mesh.verts, gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, Float32Array.from(mesh.verts), gl.DYNAMIC_DRAW);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, buffers[id].normals);
-    gl.bufferData(gl.ARRAY_BUFFER, mesh.normals, gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, Float32Array.from(mesh.normals), gl.DYNAMIC_DRAW);
 
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers[id].indices);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, Uint32Array.from(mesh.indices), gl.DYNAMIC_DRAW);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);

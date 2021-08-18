@@ -77,13 +77,13 @@ var generateMeshWasm = function(dataObj, meshObj, threshold) {
 
     meshObj.verts = new Float32Array(memory.buffer, vertsLoc, vertsNumber*3);
     meshObj.indices = new Uint32Array(memory.buffer, indicesLoc, indicesNumber);
+    meshObj.indicesNum = indicesNumber;
     meshObj.normals = new Float32Array(memory.buffer, normalsLoc, vertsNumber*3);
 
     // calculate the total used space: data, code, verts + normals, indices
     const used = dataObj.volume*4 + (dataObj.size[0]-1)*(dataObj.size[1]-1)*(dataObj.size[2]-1)*4 + vertsNumber*3*4*2 + indicesNumber*4;
 
-    console.log(Math.round(used/totalMemory*100) + "% wasm mem used");
-    //console.log(vertsNumber/indicesNumber);
+    //console.log(Math.round(used/totalMemory*100) + "% wasm mem used");
 
     freeMem();
 }
