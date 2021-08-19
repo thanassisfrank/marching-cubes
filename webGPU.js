@@ -859,7 +859,7 @@ const prefixSumA = `
         // calculate this value properly or receive in a buffer
         //                                  ^^^^^^^^^^^^^^^^^^^
         //var numBlocks = blockLength;//arrayLength(&buffer.buffer)/blockLength;
-        var numBlocks = min(blockLength, (arrayLength(&buffer.buffer)-bufferOffset.val)/blockLength);
+        var numBlocks = blockLength;//min(blockLength, (arrayLength(&buffer.buffer)-bufferOffset.val)/blockLength);
 
         
         if(lid.x == 0u) {
@@ -1032,8 +1032,8 @@ const prefixSumB = `
                 if (i == blockLength) {
                     break;
                 }
-                buffer.buffer[i + 2u*lid.x*blockLength + bufferOffset.val] = totals.buffer[2u*lid.x] + buffer.buffer[i + 2u*lid.x*blockLength] + totals.carry;
-                buffer.buffer[i + (2u*lid.x+1u)*blockLength + bufferOffset.val] = totals.buffer[2u*lid.x + 1u] + buffer.buffer[i + (2u*lid.x+1u)*blockLength] + totals.carry;
+                buffer.buffer[i + (2u*lid.x + bufferOffset.val)*blockLength] = totals.buffer[2u*lid.x] + buffer.buffer[i + (2u*lid.x + bufferOffset.val)*blockLength] + totals.carry;
+                buffer.buffer[i + (2u*lid.x+1u + bufferOffset.val)*blockLength] = totals.buffer[2u*lid.x + 1u] + buffer.buffer[i + (2u*lid.x+1u + bufferOffset.val)*blockLength] + totals.carry;
                 continuing {
                     i = i + 1u;
                 }
@@ -1665,9 +1665,8 @@ function createBindGroups(dataObj) {
 
     // create workgroupOffsets buffer
     {
-        const WGCount = Math.ceil(dataObj.size[0]/WGSize.x) * Math.ceil(dataObj.size[1]/WGSize.y) * Math.ceil(dataObj.size[2]/WGSize.z);
-        console.log("WGCount: "+ WGCount);
-        const offsetBufferLength = Math.ceil(WGCount/(WGPrefixSumCount*2)) * WGPrefixSumCount * 2;
+        console.log("WGCount: "+ WGCount.val);
+        const offsetBufferLength = Math.ceil(WGCount.val/(WGPrefixSumCount*2)) * WGPrefixSumCount*2;
         const offsetTotalsBufferLength = 2 + WGPrefixSumCount*2;
 
         vertexOffsetBuffer = device.createBuffer({
@@ -1822,69 +1821,6 @@ function createPrefixSumPipelines() {
     ]
 }
 
-function createMarchPipeline() {
-    const shaderModule = device.createShaderModule({
-        code: marchCode
-    });
-
-    // 0 bind group is for the constant data
-    var bindGroupLayout0 = createConstantsBindGroupLayout();
-
-    // 1 is for vars (threshold, vert num, index num)
-    var bindGroupLayout1 = device.createBindGroupLayout({
-        entries: [
-            {
-                binding: 0,
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: {
-                    type: "storage",
-                }
-            }
-        ]
-    });
-
-    
-    // 2 is for writing vert pos, norm + indices
-    var bindGroupLayout2 = device.createBindGroupLayout({
-        entries: [
-            // vert buffer
-            {
-                binding: 0,
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: {
-                    type: "storage",
-                }
-            },
-            // normal buffer
-            {
-                binding: 1,
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: {
-                    type: "storage",
-                }
-            },
-            // index buffer
-            {
-                binding: 2,
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: {
-                    type: "storage",
-                }
-            }
-        ]
-    });
-
-    var pipelineLayout = device.createPipelineLayout({bindGroupLayouts: [bindGroupLayout0, bindGroupLayout1, bindGroupLayout2]});
-
-    return device.createComputePipeline({
-        layout: pipelineLayout,
-        compute: {
-            module: shaderModule,
-            entryPoint: "main"
-        }
-    });
-}
-
 function createNewMarchPipeline() {
     const shaderModule = device.createShaderModule({
         code: marchCodeNew
@@ -2024,62 +1960,6 @@ function createMarchReadBuffers(vertNum, indexNum) {
     });
 }
 
-async function recordPrefixSum() {  
-    var prefixSumCommands = [];
-    // prefix sum on verts
-    const numBlocks = Math.ceil(WGCount.val/(WGPrefixSumCount*2));
-    //console.log("numblock: " + numBlocks)
-    var commandEncoder = await device.createCommandEncoder();
-
-    // prefix sum on verts
-    var passEncoder2 = commandEncoder.beginComputePass();
-    passEncoder2.setPipeline(prefixSumPipelines[0]);
-    passEncoder2.setBindGroup(0, vertexOffsetBindGroup);
-    passEncoder2.dispatch(numBlocks);
-    passEncoder2.endPass();
-
-    // prefix sum on indices
-    var passEncoder3 = commandEncoder.beginComputePass();
-    passEncoder3.setPipeline(prefixSumPipelines[0]);
-    passEncoder3.setBindGroup(0, indexOffsetBindGroup);
-    passEncoder3.dispatch(numBlocks);
-    passEncoder3.endPass();
-
-    prefixSumCommands.push(commandEncoder.finish());
-
-    if (numBlocks > 1) {
-        // second pass if there are more than 1 blocks
-        commandEncoder = await device.createCommandEncoder();
-        // for verts
-        var passEncoder4 = commandEncoder.beginComputePass();
-        passEncoder4.setPipeline(prefixSumPipelines[1]);
-        passEncoder4.setBindGroup(0, vertexOffsetBindGroup);
-        passEncoder4.dispatch(1);
-        passEncoder4.endPass();
-        // for indices
-        var passEncoder5 = commandEncoder.beginComputePass();
-        passEncoder5.setPipeline(prefixSumPipelines[1]);
-        passEncoder5.setBindGroup(0, indexOffsetBindGroup);
-        passEncoder5.dispatch(1);
-        passEncoder5.endPass();
-
-        prefixSumCommands.push(commandEncoder.finish());
-    }
-    
-
-
-    // copy values into correct buffers
-    commandEncoder = await device.createCommandEncoder();
-
-    commandEncoder.copyBufferToBuffer(vertexOffsetTotalsBuffer, 0, countReadBuffer, 0, 4);
-    commandEncoder.copyBufferToBuffer(vertexOffsetTotalsBuffer, 0, marchVarsBuffer, 4, 4);
-    commandEncoder.copyBufferToBuffer(indexOffsetTotalsBuffer, 0, countReadBuffer, 4, 4);
-    commandEncoder.copyBufferToBuffer(indexOffsetTotalsBuffer, 0, marchVarsBuffer, 8, 4);
-
-    prefixSumCommands.push(commandEncoder.finish());
-    return prefixSumCommands;
-}
-
 async function march(dataObj, meshObj, threshold, bufferId) {
     //var t0 = performance.now();
     //console.log(transformThreshold(threshold, dataObj))
@@ -2116,24 +1996,33 @@ async function march(dataObj, meshObj, threshold, bufferId) {
     var thisNumBlocks
     var OffsetIntoOffsetBuffer = 0;
     
+    const elems = 32;
+    const totalsClearArray = new Uint32Array(WGPrefixSumCount*2);
+
     //                  number of rounds to do
     for (let i = 0; i < numBlocks/(WGPrefixSumCount*2); i++) {
         //console.log("round " + i)
         device.queue.writeBuffer(bufferOffsetBuffer, 0, Uint32Array.from([OffsetIntoOffsetBuffer]));
+        if (i > 0) {
+            device.queue.writeBuffer(vertexOffsetTotalsBuffer, 2*4, totalsClearArray);
+            device.queue.writeBuffer(indexOffsetTotalsBuffer, 2*4, totalsClearArray);
+        }
         // set to 512 for now
         thisNumBlocks = Math.max(2, Math.min(WGPrefixSumCount*2, numBlocks-OffsetIntoOffsetBuffer));
-        OffsetIntoOffsetBuffer += thisNumBlocks;
+        
         //console.log(thisNumBlocks);
         
         //console.log("numblock: " + numBlocks)
         commandEncoder = await device.createCommandEncoder();
-
+        
+        
+        
         // prefix sum on verts
         var passEncoder2 = commandEncoder.beginComputePass();
         passEncoder2.setPipeline(prefixSumPipelines[0]);
         passEncoder2.setBindGroup(0, vertexOffsetBindGroup);
         passEncoder2.setBindGroup(1, bufferOffsetBindGroup);
-        passEncoder2.dispatch(numBlocks);
+        passEncoder2.dispatch(thisNumBlocks);
         passEncoder2.endPass();
 
         // prefix sum on indices
@@ -2142,8 +2031,13 @@ async function march(dataObj, meshObj, threshold, bufferId) {
         passEncoder3.setBindGroup(0, indexOffsetBindGroup);
         passEncoder3.setBindGroup(1, bufferOffsetBindGroup);
 
-        passEncoder3.dispatch(numBlocks);
+        passEncoder3.dispatch(thisNumBlocks);
         passEncoder3.endPass();
+
+        //commandEncoder.copyBufferToBuffer(vertexOffsetBuffer, 256*4*128*2, readBuffer, 0, 4*elems);
+
+        //commandEncoder.copyBufferToBuffer(vertexOffsetTotalsBuffer, 0, readBuffer, 0, 4*16);
+        
 
         //await device.queue.onSubmittedWorkDone();
         //device.queue.submit([commandEncoder.finish()])
@@ -2152,6 +2046,8 @@ async function march(dataObj, meshObj, threshold, bufferId) {
             // second pass if there are more than 1 blocks
             //commandEncoder = await device.createCommandEncoder();
             // for verts
+            
+            
             var passEncoder4 = commandEncoder.beginComputePass();
             passEncoder4.setPipeline(prefixSumPipelines[1]);
             passEncoder4.setBindGroup(0, vertexOffsetBindGroup);
@@ -2168,16 +2064,20 @@ async function march(dataObj, meshObj, threshold, bufferId) {
             passEncoder5.dispatch(1);
             passEncoder5.endPass();
 
-            commandEncoder.copyBufferToBuffer(vertexOffsetTotalsBuffer, 0, readBuffer, 0, 4*16);
+            
+            
             
         }
+        
 
         await device.queue.onSubmittedWorkDone();
         device.queue.submit([commandEncoder.finish()]);
 
-        // await readBuffer.mapAsync(GPUMapMode.READ, 0, 4*16)
-        // console.log(new Uint32Array(readBuffer.getMappedRange(0, 4*16)));
+        // await readBuffer.mapAsync(GPUMapMode.READ, 0, 4*elems)
+        // console.log(new Uint32Array(readBuffer.getMappedRange(0, 4*elems)));
         // readBuffer.unmap();
+
+        OffsetIntoOffsetBuffer += thisNumBlocks;
     }
     // copy values into correct buffers
     commandEncoder = await device.createCommandEncoder();
@@ -2327,7 +2227,10 @@ async function setupRenderer(canvas) {
     adapter = await navigator.gpu.requestAdapter({
         powerPreference: "high-performance"
     });
-    device = await adapter.requestDevice();
+    console.log(adapter.limits);
+    device = await adapter.requestDevice({
+        maxStorageBufferBindingSize: 2
+    });
     console.log(device.limits);
 
     var ctx = canvas.getContext("webgpu");
