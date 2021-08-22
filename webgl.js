@@ -216,17 +216,20 @@ function createBuffers() {
 }
 
 function updateBuffers(mesh, id) {
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffers[id].position);
+    var thisBuffers = {};
+    gl.bindBuffer(gl.ARRAY_BUFFER, thisBuffers.position);
     gl.bufferData(gl.ARRAY_BUFFER, Float32Array.from(mesh.verts), gl.DYNAMIC_DRAW);
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffers[id].normals);
+    gl.bindBuffer(gl.ARRAY_BUFFER, thisBuffers.normals);
     gl.bufferData(gl.ARRAY_BUFFER, Float32Array.from(mesh.normals), gl.DYNAMIC_DRAW);
 
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers[id].indices);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, thisBuffers.indices);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, Uint32Array.from(mesh.indices), gl.DYNAMIC_DRAW);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+
+    mesh.buffers = thisBuffers;
 }
 
 function deleteBuffers(id) {
@@ -244,7 +247,7 @@ function clearScreen(gl) {
 }
 
 // for rendering a particular set of buffers associated with a view
-var renderView = function(gl, projMat, modelViewMat, box, indicesNum, id) {
+var renderView = function(gl, projMat, modelViewMat, box, meshObj) {
     if (!buffers[id]) return;
     gl.viewport(box.left, box.bottom, box.width, box.height);
     gl.scissor(box.left, box.bottom, box.width, box.height);
@@ -261,13 +264,13 @@ var renderView = function(gl, projMat, modelViewMat, box, indicesNum, id) {
         modelViewMat
     );
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffers[id].position);
+    gl.bindBuffer(gl.ARRAY_BUFFER, meshObj.buffers.position);
     gl.vertexAttribPointer(programInfo.attribLocations.position, 3, gl.FLOAT, gl.FALSE, 0, 0);
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffers[id].normals);
+    gl.bindBuffer(gl.ARRAY_BUFFER, meshObj.buffers.normals);
     gl.vertexAttribPointer(programInfo.attribLocations.normal, 3, gl.FLOAT, gl.FALSE, 0, 0);
 
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers[id].indices); 
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, meshObj.buffers.indices); 
       
 
     gl.drawElements(gl.TRIANGLES, indicesNum, gl.UNSIGNED_INT, 0);

@@ -5,7 +5,7 @@ import * as gpu from "./webGPU.js";
 import * as wasm from "./marchingWasm.js";
 import * as js from "./marching.js";
 
-export {setMarchModule, updateBuffersNeeded, setupMarch, march};
+export {setMarchModule, updateBuffersNeeded, setupMarchModule, setupMarch, march, module};
 
 var module;
 
@@ -27,6 +27,12 @@ function setMarchModule(thisModule) {
     module = thisModule;
 }
 
+async function setupMarchModule() {
+    if (module == "gpu") {
+        await gpu.setupMarchModule();
+    }
+}
+
 async function setupMarch(...args) {
     if (module == "gpu") {
         await gpu.setupMarch(...args)
@@ -35,9 +41,6 @@ async function setupMarch(...args) {
     }
 }
 
-//dataObj, meshObj, threshold, bufferId
-//dataObj, meshObj, threshold
-//dataObj, meshObj, threshold
 async function march(...args) {
     if (module == "gpu") {
         await gpu.march(...args);

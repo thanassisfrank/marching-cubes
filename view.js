@@ -1,39 +1,29 @@
 // view.js
 // handles the creation of view objects, their management and deletion
 
-import { Camera } from "./camera.js";
-import { Data } from "./data.js";
-import { Mesh } from "./mesh.js";
-import { get, create, toRads } from "./utils.js";
+import { get, create, toRads, newId } from "./utils.js";
 
 import { VecMath } from "./VecMath.js";
 import {mat4} from 'https://cdn.skypack.dev/gl-matrix';
-import {createBuffers, updateBuffers, deleteBuffers, clearScreen, renderView} from "./render.js";
+import {createBuffers, updateMeshBuffers, deleteBuffers, clearScreen, renderView} from "./render.js";
 
 // import { generateMesh } from "./marching.js";
 // import { generateMeshWasm } from "./marchingWasm.js";
 // import {march} from "./webGPU.js";
 
-import { march, updateBuffersNeeded } from "./march.js";
+import { march } from "./march.js";
 
-export {view};
+export {viewManager};
 
 
 
-var view = {
+var viewManager = {
     maxViews: 30,
     // an object to hold all views that have been created
     views: {},
     initialThreshold: 10,
     moreViewsAllowed: function() {
         return Object.keys(this.views).length < this.maxViews;
-    },
-    newId: function() {
-        var id = Object.keys(this.views).length;
-        while (this.views.hasOwnProperty(String(id))) {
-            id++;
-        };
-        return String(id);
     },
     createView: function(config) {
         // check if it is going to be linked with another view object
@@ -57,13 +47,13 @@ var view = {
         camera.setProjMat();
 
         // generate id
-        const id = this.newId();
+        const id = newId(this.views);
         var newView = new this.View(id, camera, data,  mesh, this.initialThreshold);
         this.createViewDOM(id, newView);
         this.views[id] = newView;
         newView.init();
 
-        return id;
+        return newView;
     },
     createViewDOM: function(id, view) {
         // create div element for frame
@@ -80,7 +70,7 @@ var view = {
         slider.step = 0.05;
         var closeBtn = create("BUTTON");
         closeBtn.onclick = () => {
-            this.deleteView(id);
+            this.deleteView(view);
         }
         closeBtn.innerHTML = "X";
         //var text = create("P");
@@ -117,9 +107,11 @@ var view = {
         get("view-container-container").appendChild(viewContainer);
 
     }, 
-    deleteView: function(id) {
-        this.views?.[id].delete();
-        delete this.views[id];
+    deleteView: function(view) {
+        console.log(view);
+        this.views?.[view.id].delete();
+
+        delete this.views[view.id];
     },
     render: function(gl) {
         // call the render functions of all currently active views
@@ -141,7 +133,7 @@ var view = {
         this.updating = false;
         this.box = {};
         this.init = function() {
-            this.bufferId = createBuffers();
+            //this.bufferId = createBuffers();
             this.updateThreshold(this.threshold);
         }
         this.updateThreshold = async function(val) {
@@ -152,17 +144,18 @@ var view = {
                     const t0 = performance.now();
                     await this.generateMesh();
                     const time = performance.now()-t0;
-                    if (updateBuffersNeeded()) this.updateBuffers();
+                    // if (updateBuffersNeeded()) this.updateBuffers();
+                    this.updateBuffers();
                     //view.timeLogs.push([this.mesh.verts.length/3 | this.mesh.vertNum, time]);
                     this.updating = false;
                 };
             };
         }
         this.generateMesh = async function() {
-            await march(this.data, this.mesh, this.threshold, this.bufferId);
+            await march(this.data, this.mesh, this.threshold);
         }
         this.updateBuffers = function() {
-            updateBuffers(this.mesh, this.bufferId);
+            updateMeshBuffers(this.mesh);
         }
         this.getFrameElem = function() {
             return get(this.id).children[0];
@@ -187,7 +180,7 @@ var view = {
             // find place for model mat
             // find place for indices length
             if (this.data.initialised) {
-                renderView(gl, this.camera.projMat, this.camera.getModelViewMat(), this.getBox(), this.mesh.indicesNum, this.bufferId);
+                renderView(gl, this.camera.projMat, this.camera.getModelViewMat(), this.getBox(), this.mesh);
             };
         }
         this.delete = function() {

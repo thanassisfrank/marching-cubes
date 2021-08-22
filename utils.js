@@ -1,6 +1,6 @@
 // utils.js
 
-export {get, getCtx, create, setupCanvasDims, getFirstOfClass, repositionCanvas, sin30, cos30, toRads, unZipVerts};
+export {get, getCtx, create, setupCanvasDims, getFirstOfClass, repositionCanvas, sin30, cos30, toRads, unZipVerts, newId, stringFormat};
 
 var get = (id) => {
     return document.getElementById(id)
@@ -67,3 +67,22 @@ function unZipVerts(verts) {
     return vertsOut;
 }
 
+// return a new id that is not one of the 
+var newId = (obj) => {
+    var count = 0;
+    let id;
+    do {
+        id = Math.round(Math.random()*512).toString(16);
+        count++;
+    } while (obj[id] && count < 1000);
+    return id;
+}
+
+// replaces every {{key}} in s with replace[key]
+function stringFormat(s, replace) {
+    for (const key in replace) {
+        console.log(key)
+        s = s.replaceAll("{{"+key+"}}", replace[key])
+    }
+    return s;
+}

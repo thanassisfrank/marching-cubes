@@ -3,8 +3,9 @@
 // chooses which to use depending on availability
 import * as gpu from "./webGPU.js";
 import * as gl from "./webgl.js";
+import {module as marchModule} from "./march.js";
 
-export {setRenderModule, setupRenderer, createBuffers, updateBuffers, renderView, deleteBuffers, clearScreen};
+export {setRenderModule, setupRenderer, createBuffers, updateMeshBuffers, renderView, deleteBuffers, clearScreen};
 
 var module;
 
@@ -40,9 +41,11 @@ function createBuffers(...args) {
     }
 }
 
-function updateBuffers(...args) {
+function updateMeshBuffers(...args) {
     if (module == "gpu") {
-        return gpu.updateBuffers(...args);
+        if (marchModule != "gpu") {
+            return gpu.updateBuffers(...args);
+        }
     } else {
         return gl.updateBuffers(...args);
     }

@@ -1,9 +1,12 @@
 // canvasRender.js
 // implements a basic 3d engine using the canvas2d api
 
-import {getCtx} from "./utils.js";
+import {getCtx, toRads} from "./utils.js";
 import {VecMath} from "./VecMath.js";
+import {mat4, vec4} from 'https://cdn.skypack.dev/gl-matrix';
 export {setupRenderer, renderFrame};
+
+console.log(vec4)
 
 const worldScale = 20;
 const camZ = 20;
@@ -22,14 +25,18 @@ var projPoint = (mat, pos, scale, off, worldOff, mirrorAxes) => {
     return  VecMath.vecAdd(proj, off || [0, 0, 0]);
 }
 
-const renderDataPoints = (ctx, data, threshold, viewMat, scale, off, worldOff) => {
+const renderDataPoints = function(ctx, data, threshold, scale, off, mat){// viewMat, worldOff) => {
     ctx.fillStyle = "black"
     let size = 0;
     for (let i = 0; i < data.length; i++) {
         for (let j = 0; j < data[i].length; j++) {
             for (let k = 0; k < data[i][j].length; k++) {
 
-                const projPos = projPoint(viewMat, [i, j, k], worldScale, off, worldOff);
+                //const projPos = projPoint(viewMat, [i, j, k], worldScale, off, worldOff);
+                let projPos = new Float32Array(4);
+                vec4.transformMat4(projPos, [i, j, k, 1], mat)
+                vec4.scale(projPos, projPos, 100);
+                vec4.add(projPos, projPos, [...off, 0, 0])
                 const size = (data[i][j][k] > threshold)*scale;//*data[i][j][k];
                 ctx.fillRect(projPos[0]-size/2, projPos[1]-size/2, size, size)
             }
@@ -90,14 +97,17 @@ const renderAxes = (ctx, viewMat) => {
 }
 
 // the main function called by other modules, takes the data, mesh, camera angle etc and renders a frame using the ctx
-var renderFrame = function(ctx, mesh, angle, scale, threshold, p) {
+var renderFrame = function(ctx, mesh, angle, scale, threshold, p, mat) {
     ctx.clearRect(0, 0, p.w, p.h);
 
     const worldOff = [-(p.data.length-1)/2, -(p.data[0].length-1)/2, -(p.data[0][0].length-1)/2]
     const off = [p.w/2, p.h/2, 0];
-    const viewMat = VecMath.getRotatedIso(angle);
+    //const viewMat = VecMath.getRotatedIso(angle);
 
-    renderDataPoints(ctx, p.data, threshold, viewMat, scale, off, worldOff);
-    renderMesh(ctx, mesh, viewMat, scale, off, worldOff)
+    let viewMat = new Float32Array(16);
+    mat4.rotateZ(viewMat, mat, toRads(angle));
+
+    renderDataPoints(ctx, p.data, threshold, scale, off, viewMat);//, viewMat, worldOff);
+    //renderMesh(ctx, mesh, viewMat, scale, off, worldOff)
     //renderAxes(ctx, viewMat);
 }
