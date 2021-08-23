@@ -13,6 +13,67 @@ import {setupMarchModule, setMarchModule, setupMarch} from "./march.js";
 setMarchModule("gpu");
 setRenderModule("gpu");
 
+const datasets = {
+    engine: {
+        x:128,
+        y:256,
+        z:256,
+        src: "./data/engine_256x256x128_uint8.raw",
+        dataType: Uint8Array
+    },
+    turbulence: {
+        x:256,
+        y:256,
+        z:256,
+        src: "./data/tacc_turbulence_256x256x256_float32.raw",
+        dataType: Float32Array
+    },
+    magnetic: {
+        x:512,
+        y:512,
+        z:512,
+        src: "./data/magnetic_reconnection_512x512x512_float32.raw",
+        dataType: Float32Array
+    },
+    ripple: {
+        x:221,
+        y:221,
+        z:100,
+        f: (i, j, k) => {
+            const dist = Math.sqrt(Math.pow((i-110)/3, 2) + Math.pow((j-110)/3, 2));
+            return 250-(k-Math.cos(dist/2)*0.5*k*Math.pow(1.03, -dist));
+        }
+    },
+    heptane: {
+        x: 302,
+        y: 302,
+        z: 302,
+        src: "./data/csafe_heptane_302x302x302_uint8.raw",
+        dataType: Uint8Array
+    },
+    lobster: {
+        x: 56, 
+        y: 324, 
+        z: 301,
+        src: "./data/lobster_301x324x56_uint8.raw",
+        dataType: Uint8Array
+    },
+    axons: {
+        x: 76, 
+        y: 1033, 
+        z: 1464,
+        src: "./data/neocortical_layer_1_axons_1464x1033x76_uint8.raw",
+        dataType: Uint8Array
+    },
+    silicium: {
+        x: 34, 
+        y: 34, 
+        z: 98,
+        src: "./data/silicium_98x34x34_uint8.raw",
+        dataType: Uint8Array
+    }
+}
+
 document.body.onload = main;
 
 async function main() {
@@ -40,24 +101,9 @@ async function main() {
     if (!ctx) return;
 
     var camera1 = cameraManager.createCamera();
-    var mesh1 = meshManager.createMesh();;
+    var mesh1 = meshManager.createMesh();
 
-    var data1 = await dataManager.createData({
-        x:128,
-        y:256,
-        z:256,
-        src: "./data/engine_256x256x128_uint8.raw",
-        dataType: Uint8Array
-    });
-    // var data1 = await dataManager.createData({
-    //     x:221,
-    //     y:221,
-    //     z:100,
-    //     f: (i, j, k) => {
-    //         const dist = Math.sqrt(Math.pow((i-110)/3, 2) + Math.pow((j-110)/3, 2));
-    //         return 250-(k-Math.cos(dist/2)*0.5*k*Math.pow(1.03, -dist));
-    //     }
-    // });
+    var data1 = await dataManager.createData(datasets.lobster);
 
     //data1.generateData(15, 15, 15, (i, j, k) => Math.cos(Math.sqrt(Math.pow(i, 2) + Math.pow(j, 2) + Math.pow(k, 2))/4) + 1);
     //data1.generateData(15, 15, 15, (i, j, k) => Math.sqrt(Math.pow(i-7, 2) + Math.pow(j-7, 2) + Math.pow(k-7, 2))*10);
@@ -70,13 +116,6 @@ async function main() {
     // });
     //data1.generateData(37, 37, 37, (i, j, k) => k*10);
     //data1.generateData(257, 257, 257, (i, j, k) => Math.sqrt(Math.pow(i-7, 2) + Math.pow(j-7, 2) + Math.pow(k-7, 2))*2);
-
-    //const success = await data1.fromFile("./data/silicium_98x34x34_uint8.raw", Uint8Array, 34, 34, 98);
-    //const success = await data1.fromFile("./data/lobster_301x324x56_uint8.raw", Uint8Array, 56, 324, 301);
-    // const success = await data1.fromFile("./data/tacc_turbulence_256x256x256_float32.raw", Float32Array, 256, 256, 256);
-    //const success = await data1.fromFile("./data/csafe_heptane_302x302x302_uint8.raw", Uint8Array, 302, 302, 302);
-    //const success = await data1.fromFile("./data/neocortical_layer_1_axons_1464x1033x76_uint8.raw", Uint8Array, 76, 1033, 1464);
-    //const success = await data1.fromFile("./data/magnetic_reconnection_512x512x512_float32.raw", Float32Array, 512, 512, 512);
 
     await setupMarch(data1);
 

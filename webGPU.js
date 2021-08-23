@@ -668,6 +668,7 @@ const enumerateCode = `
     threshold : f32;
     vertCount : atomic<u32>;
     indexCount : atomic<u32>;
+    cellScale : u32;
 };
 [[block]] struct Tables {
     vertCoord : array<array<u32, 3>, 8>;
@@ -742,6 +743,7 @@ fn main(
     [[builtin(local_invocation_index)]] localIndex : u32,
     [[builtin(workgroup_id)]] WGId : vec3<u32>
 ) {                
+    var cellScale = vars.cellScale;
     var packing = {{packing}}u;
     var code = 0u;
     var thisVertCount = 0u;
@@ -750,7 +752,12 @@ fn main(
 
     // if outside of data, return
     var cells : vec3<u32> = vec3<u32>(d.size.x - 1u, d.size.y - 1u, d.size.z - 1u);      
-    if (id.x < cells.x && id.y < cells.y && id.z < cells.z) {        
+    // needs changing
+    if (
+        (id.x + 1u)*cellScale < d.size.x && 
+        (id.y + 1u)*cellScale < d.size.y && 
+        (id.z + 1u)*cellScale < d.size.z
+    ) {        
         var c : array<u32, 3>;
         var i = 0u;
         loop {
@@ -759,7 +766,7 @@ fn main(
             }
             // the coordinate of the vert being looked at
             c = tables.vertCoord[i];
-            var val = getVal(id.x + c[0], id.y + c[1], id.z + c[2], packing);
+            var val = getVal((id.x + c[0])*cellScale, (id.y + c[1])*cellScale, (id.z + c[2])*cellScale, packing);
             if (val > vars.threshold) {
                 code = code | (1u << i);
             }
@@ -1057,6 +1064,7 @@ const marchCodeNew = `
     threshold : f32;
     currVert : atomic<u32>;
     currIndex : atomic<u32>;
+    cellScale : u32;
 };
 [[block]] struct Tables {
     vertCoord : array<array<u32, 3>, 8>;
@@ -1103,8 +1111,8 @@ fn unpack(val: u32, i : u32, packing : u32) -> f32{
     return bitcast<f32>(val);
 }
 
-fn getVal(x : u32, y : u32, z : u32, packing : u32) -> f32 {
-    var a = getIndex3d(x, y, z, d.size);
+fn getVal(x : u32, y : u32, z : u32, packing : u32, cellScale : u32) -> f32 {
+    var a = getIndex3d(x*cellScale, y*cellScale, z*cellScale, d.size);
     return unpack(d.data[a/packing], a%packing, packing);
 }
 
@@ -1118,6 +1126,7 @@ fn main(
     
     var WGSize = ${WGSize.x*WGSize.y*WGSize.z}u;
     
+    var cellScale = vars.cellScale;
     var packing = {{packing}}u;
     var code = 0u;
 
@@ -1134,7 +1143,11 @@ fn main(
 
     // if outside of data, return
     var cells : vec3<u32> = vec3<u32>(d.size.x - 1u, d.size.y - 1u, d.size.z - 1u);
-    if (id.x >= cells.x || id.y >= cells.y || id.z >= cells.z) {
+    if (
+        (id.x + 1u)*cellScale >= d.size.x ||
+        (id.y + 1u)*cellScale >= d.size.y || 
+        (id.z + 1u)*cellScale >= d.size.z
+    ) {
         // code remains 0
         code = 0u;
     } else {
@@ -1147,7 +1160,7 @@ fn main(
             }
             // the coordinate of the vert being looked at
             coord = tables.vertCoord[i];
-            var val : f32 = getVal(id.x + coord[0], id.y + coord[1], id.z + coord[2], packing);
+            var val : f32 = getVal(id.x + coord[0], id.y + coord[1], id.z + coord[2], packing, cellScale);
             if (val > vars.threshold) {
                 code = code | (1u << i);
             }
@@ -1176,6 +1189,9 @@ fn main(
         }
         // get grad of grid points
     
+        
+        // CHANGE TO INCLUDE CELLSIZE
+
         // i= 0u;
         // loop {
         //     if (i == 8u) {
@@ -1237,13 +1253,13 @@ fn main(
             var c : array<i32, 2> = tables.edgeToVerts[edges[i]];
             var a : array<u32, 3> = tables.vertCoord[c[0]];
             var b : array<u32, 3> = tables.vertCoord[c[1]];
-            var va : f32 = getVal(id.x + a[0], id.y + a[1], id.z + a[2], packing);
-            var vb : f32 = getVal(id.x + b[0], id.y + b[1], id.z + b[2], packing);
+            var va : f32 = getVal(id.x + a[0], id.y + a[1], id.z + a[2], packing, cellScale);
+            var vb : f32 = getVal(id.x + b[0], id.y + b[1], id.z + b[2], packing, cellScale);
             var fac : f32 = (vars.threshold - va)/(vb - va);
             // fill vertices
-            thisVerts[3u*i + 0u] = mix(f32(a[0]), f32(b[0]), fac) + f32(id.x);
-            thisVerts[3u*i + 1u] = mix(f32(a[1]), f32(b[1]), fac) + f32(id.y);
-            thisVerts[3u*i + 2u] = mix(f32(a[2]), f32(b[2]), fac) + f32(id.z);
+            thisVerts[3u*i + 0u] = (mix(f32(a[0]), f32(b[0]), fac) + f32(id.x)) * f32(cellScale);
+            thisVerts[3u*i + 1u] = (mix(f32(a[1]), f32(b[1]), fac) + f32(id.y)) * f32(cellScale);
+            thisVerts[3u*i + 2u] = (mix(f32(a[2]), f32(b[2]), fac) + f32(id.z)) * f32(cellScale);
             // fill normals
             // thisNormals[3u*i + 0u] = mix(gridNormals[c[0]][0], gridNormals[c[1]][0], fac);
             // thisNormals[3u*i + 1u] = mix(gridNormals[c[0]][1], gridNormals[c[1]][1], fac);
@@ -1483,7 +1499,7 @@ function createGlobalBuffers() {
 
     // global
     var marchVarsBuffer = device.createBuffer({
-        size: Float32Array.BYTES_PER_ELEMENT + 2*Uint32Array.BYTES_PER_ELEMENT,
+        size: Float32Array.BYTES_PER_ELEMENT + 3*Uint32Array.BYTES_PER_ELEMENT,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
     });
 
@@ -1668,11 +1684,11 @@ async function setupMarch(dataObj) {
       
     dataObj.marchData.packing = 1;
     if (dataObj.data.constructor == Float32Array) {
-        
+        dataObj.marchData.packing = 4;
     } else if (dataObj.data.constructor == Uint8Array) {
         dataObj.marchData.packing = 4;
     } else {
-        console.log("only float32 data values supported so far");
+        console.log("only float32 and uint8 data values supported so far");
         return;
     }
 
@@ -1694,6 +1710,8 @@ async function setupMarch(dataObj) {
     }
     
     createBindGroups(dataObj);    
+
+    dataObj.marchData.cellScale = 1;
 }
 
 function createBindGroups(dataObj) {
@@ -1996,7 +2014,7 @@ function createMarchReadBuffers(vertNum, indexNum) {
     });
 }
 
-async function march(dataObj, meshObj, threshold) {
+async function getMarchCounts(dataObj, threshold) {
     const WGCount = dataObj.marchData.WGCount;
     //const buffers 
 
@@ -2007,6 +2025,7 @@ async function march(dataObj, meshObj, threshold) {
     // take up a fair amount of time
     // implement as compute shaders if they become a bottleneck
     device.queue.writeBuffer(marchData.buffers.marchVars, 0, new Float32Array([transformThreshold(threshold, dataObj), 0, 0]));
+    device.queue.writeBuffer(marchData.buffers.marchVars, 12, new Uint32Array([dataObj.marchData.cellScale]));
 
     device.queue.writeBuffer(dataObj.marchData.buffers.vertexOffset, 0, new Float32Array(Math.ceil(WGCount.val/(WGPrefixSumCount*2)) * WGPrefixSumCount * 2));
     device.queue.writeBuffer(dataObj.marchData.buffers.indexOffset, 0, new Float32Array(Math.ceil(WGCount.val/(WGPrefixSumCount*2)) * WGPrefixSumCount * 2));
@@ -2082,11 +2101,6 @@ async function march(dataObj, meshObj, threshold) {
         //device.queue.submit([commandEncoder.finish()])
         
         if (numBlocks > 0) {
-            // second pass if there are more than 1 blocks
-            //commandEncoder = await device.createCommandEncoder();
-            // for verts
-            
-            
             var passEncoder4 = commandEncoder.beginComputePass();
             passEncoder4.setPipeline(marchData.pipelines.prefix[1]);
             passEncoder4.setBindGroup(0, dataObj.marchData.bindGroups.vertexOffset);
@@ -2102,12 +2116,7 @@ async function march(dataObj, meshObj, threshold) {
 
             passEncoder5.dispatch(1);
             passEncoder5.endPass();
-
-            
-            
-            
         }
-        
 
         await device.queue.onSubmittedWorkDone();
         device.queue.submit([commandEncoder.finish()]);
@@ -2140,6 +2149,47 @@ async function march(dataObj, meshObj, threshold) {
     //console.log("verts:", vertNum, indNum);  
     marchData.buffers.countReadBuffer.unmap();
 
+    return [vertNum, indNum];
+}
+
+async function march(dataObj, meshObj, threshold) {
+    var vertNum, indNum;
+
+    var triedScales = new Set();
+    var workingScales = new Set();
+    var currScale;
+    var maxSize;
+    var maxStorage = device.limits.maxStorageBufferBindingSize/50;
+    
+    while (true) {
+        currScale = dataObj.marchData.cellScale
+        //console.log(currScale);
+        triedScales.add(currScale);
+
+        [vertNum, indNum] = await getMarchCounts(dataObj, threshold);
+
+        maxSize = Math.max(vertNum*3*4, indNum*4);
+
+        //console.log(maxSize/maxStorage);
+        if (maxSize > maxStorage) {
+            // increase the scale for more room
+            dataObj.marchData.cellScale++;
+        } else if (currScale > 1 && maxSize <= maxStorage*Math.pow((currScale-1)/currScale, 2)) {
+            //console.log("tried increasing")
+            // decrease the scale if we can
+            workingScales.add(currScale);
+            const newScale = currScale - 1;
+            if (triedScales.has(newScale)) {
+                //console.log("already tried ", newScale)
+                break;
+            } else {
+                dataObj.marchData.cellScale = newScale;
+            }
+        } else {
+            break;
+        }
+    }
+    console.log(currScale);
     // marching pass =====================================================================
 
     meshObj.indicesNum = indNum;
@@ -2167,21 +2217,12 @@ async function march(dataObj, meshObj, threshold) {
     //     createMarchReadBuffers(vertNum, indNum);
     // };
 
-    commandEncoder = device.createCommandEncoder();
+    var commandEncoder = device.createCommandEncoder();
     //device.queue.writeBuffer(marchVarsBuffer, 0, new Float32Array([threshold, 0, 0]));
 
     await commandEncoder;
     var passEncoder6 = commandEncoder.beginComputePass();
     
-    // passEncoder6.setPipeline(marchPipeline);
-    // passEncoder6.setBindGroup(0, constantsBindGroup);
-    // passEncoder6.setBindGroup(1, marchVarsBindGroup);
-    // passEncoder6.setBindGroup(2, marchOutBindGroup);
-    // passEncoder6.dispatch(
-    //     Math.ceil(dataObj.size[0]/WGSize.x),
-    //     Math.ceil(dataObj.size[1]/WGSize.y),
-    //     Math.ceil(dataObj.size[2]/WGSize.z)
-    // );
     passEncoder6.setPipeline(dataObj.marchData.pipelines.march);
     passEncoder6.setBindGroup(0, dataObj.marchData.bindGroups.constants);
     passEncoder6.setBindGroup(1, marchData.bindGroups.marchVars);
@@ -2204,8 +2245,6 @@ async function march(dataObj, meshObj, threshold) {
     // };
 
     device.queue.submit([commandEncoder.finish()]);
-
-    console.log("done")
 
     // readBuffer.mapAsync(GPUMapMode.READ, 0, 7776*4).then(() => {
     //     var offsets = new Uint32Array(readBuffer.getMappedRange(0, 7776*4)); 
