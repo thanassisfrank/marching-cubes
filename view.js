@@ -48,7 +48,7 @@ var viewManager = {
 
         // generate id
         const id = newId(this.views);
-        var newView = new this.View(id, camera, data,  mesh, this.initialThreshold);
+        var newView = new this.View(id, camera, data,  mesh);
         this.createViewDOM(id, newView);
         this.views[id] = newView;
         newView.init();
@@ -64,10 +64,10 @@ var viewManager = {
         frame.classList.add("view-frame");
         var slider = create("INPUT");
         slider.type = "range";
-        slider.min = 0;
-        slider.max = 255;
-        slider.value = this.initialThreshold;
-        slider.step = 0.05;
+        slider.min = Math.max(view.data.limits[0] - 5, 0);
+        slider.max = view.data.limits[1] + 5;
+        slider.value = (view.data.limits[0] + view.data.limits[1])/2;
+        slider.step = (view.data.limits[0] - view.data.limits[1]) * 100;
         var closeBtn = create("BUTTON");
         closeBtn.onclick = () => {
             this.deleteView(view);
@@ -123,13 +123,13 @@ var viewManager = {
         }
     },
     timeLogs: [],
-    View: function(id, camera, data, mesh, threshold) {
+    View: function(id, camera, data, mesh) {
         this.id = id;
         this.bufferId;
         this.camera = camera;
         this.data = data;
         this.mesh = mesh;
-        this.threshold = threshold;
+        this.threshold = (this.data.limits[0] + this.data.limits[1])/2;
         this.updating = false;
         this.box = {};
         this.init = function() {

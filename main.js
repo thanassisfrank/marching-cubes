@@ -74,6 +74,7 @@ const datasets = {
     }
 }
 
+
 document.body.onload = main;
 
 async function main() {
@@ -103,7 +104,7 @@ async function main() {
     var camera1 = cameraManager.createCamera();
     var mesh1 = meshManager.createMesh();
 
-    var data1 = await dataManager.createData(datasets.lobster);
+    var data1 = await dataManager.createData(datasets.engine);
 
     //data1.generateData(15, 15, 15, (i, j, k) => Math.cos(Math.sqrt(Math.pow(i, 2) + Math.pow(j, 2) + Math.pow(k, 2))/4) + 1);
     //data1.generateData(15, 15, 15, (i, j, k) => Math.sqrt(Math.pow(i-7, 2) + Math.pow(j-7, 2) + Math.pow(k-7, 2))*10);
@@ -130,7 +131,7 @@ async function main() {
     document.body.onkeypress = function(e) {
         switch (e.key) {
             case " ":
-                console.table(viewManager.timeLogs);
+                console.table(view1.threshold);
                 break;
         }
     }

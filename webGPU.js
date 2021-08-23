@@ -1676,15 +1676,29 @@ function createBindGroupLayouts() {
     ];
 }
 
+function getWGCount(dataObj) {
+    const cellScale = dataObj.marchData.cellScale;
+    var WGCount = {
+        x: Math.ceil((dataObj.size[0]-1)/(WGSize.x * cellScale)),
+        y: Math.ceil((dataObj.size[1]-1)/(WGSize.y * cellScale)),
+        z: Math.ceil((dataObj.size[2]-1)/(WGSize.z * cellScale))
+    }
+    WGCount.val = WGCount.x*WGCount.y*WGCount.z;
+
+    dataObj.marchData.WGCount = WGCount;
+}
+
 async function setupMarch(dataObj) { 
     // temp, move to main when there is function to get device
     if (Object.keys(marchData.buffers).length == 0) {
         setupMarchModule(); 
     }
+
+    dataObj.marchData.cellScale = 1;
       
     dataObj.marchData.packing = 1;
     if (dataObj.data.constructor == Float32Array) {
-        dataObj.marchData.packing = 4;
+        dataObj.marchData.packing = 1;
     } else if (dataObj.data.constructor == Uint8Array) {
         dataObj.marchData.packing = 4;
     } else {
@@ -1692,14 +1706,7 @@ async function setupMarch(dataObj) {
         return;
     }
 
-    var WGCount = {
-        x: Math.ceil((dataObj.size[0]-1)/WGSize.x),
-        y: Math.ceil((dataObj.size[1]-1)/WGSize.y),
-        z: Math.ceil((dataObj.size[2]-1)/WGSize.z)
-    }
-    WGCount.val = WGCount.x*WGCount.y*WGCount.z;
-
-    dataObj.marchData.WGCount = WGCount;
+    getWGCount(dataObj);
 
     // create the enumaeration and marching cubes pipelines
     marchData.pipelines.prefix = createPrefixSumPipelines();
@@ -1711,7 +1718,7 @@ async function setupMarch(dataObj) {
     
     createBindGroups(dataObj);    
 
-    dataObj.marchData.cellScale = 1;
+    
 }
 
 function createBindGroups(dataObj) {
@@ -1723,7 +1730,7 @@ function createBindGroups(dataObj) {
     {
         var dataBuffer = device.createBuffer({
             size: 32 + Math.ceil((dataObj.volume * 4/packing)/4)*4,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
             mappedAtCreation: true
         }); 
 
@@ -1769,81 +1776,7 @@ function createBindGroups(dataObj) {
         });
     }
 
-    // create workgroupOffsets buffer
-    {
-        console.log("WGCount: "+ WGCount.val);
-        const offsetBufferLength = Math.ceil(WGCount.val/(WGPrefixSumCount*2)) * WGPrefixSumCount*2;
-
-        var vertexOffsetBuffer = device.createBuffer({
-            size: offsetBufferLength * Uint32Array.BYTES_PER_ELEMENT,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
-        });
-        
-        var indexOffsetBuffer = device.createBuffer({
-            size: offsetBufferLength * Uint32Array.BYTES_PER_ELEMENT,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
-        });
-
-        dataObj.marchData.buffers.vertexOffset = vertexOffsetBuffer;
-        dataObj.marchData.buffers.indexOffset = indexOffsetBuffer;        
-
-        dataObj.marchData.bindGroups.vertexOffset = device.createBindGroup({
-            layout: dataObj.marchData.pipelines.enumerate.getBindGroupLayout(2),
-            entries: [
-                {
-                    binding: 0,
-                    resource: {
-                        buffer: vertexOffsetBuffer
-                    }
-                },
-                {
-                    binding: 1,
-                    resource: {
-                        buffer: marchData.buffers.vertexOffsetTotals
-                    }
-                }
-            ]
-        });
-
-        dataObj.marchData.bindGroups.indexOffset = device.createBindGroup({
-            layout: dataObj.marchData.pipelines.enumerate.getBindGroupLayout(3),
-            entries: [
-                {
-                    binding: 0,
-                    resource: {
-                        buffer: indexOffsetBuffer
-                    }
-                },
-                {
-                    binding: 1,
-                    resource: {
-                        buffer: marchData.buffers.indexOffsetTotals
-                    }
-                }
-            ]
-        });
-    }
-
-    // create combined offset bind group for march stage
-    {
-        dataObj.marchData.bindGroups.combinedOffset = device.createBindGroup({
-            layout: dataObj.marchData.pipelines.march.getBindGroupLayout(3),
-            entries: [
-                {
-                    binding: 0,
-                    resource: {
-                        buffer: vertexOffsetBuffer
-                    }
-                },
-                {
-                    binding: 1,
-                    resource: {
-                        buffer: indexOffsetBuffer
-                    }
-                }
-            ]
-        });
-    }
+    createOffsetBindGroups(dataObj);
 }
 
 function createConstantsBindGroupLayout() {
@@ -2014,8 +1947,83 @@ function createMarchReadBuffers(vertNum, indexNum) {
     });
 }
 
+function createOffsetBindGroups(dataObj) {
+    const WGCount = dataObj.marchData.WGCount;
+    const offsetBufferLength = Math.ceil(WGCount.val/(WGPrefixSumCount*2)) * WGPrefixSumCount*2;
+    //console.log("WGCount: "+ WGCount.val);
+    
+    var vertexOffsetBuffer = device.createBuffer({
+        size: offsetBufferLength * Uint32Array.BYTES_PER_ELEMENT,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+    });
+    
+    var indexOffsetBuffer = device.createBuffer({
+        size: offsetBufferLength * Uint32Array.BYTES_PER_ELEMENT,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+    });
+
+    dataObj.marchData.buffers.vertexOffset = vertexOffsetBuffer;
+    dataObj.marchData.buffers.indexOffset = indexOffsetBuffer;        
+
+    dataObj.marchData.bindGroups.vertexOffset = device.createBindGroup({
+        layout: dataObj.marchData.pipelines.enumerate.getBindGroupLayout(2),
+        entries: [
+            {
+                binding: 0,
+                resource: {
+                    buffer: vertexOffsetBuffer
+                }
+            },
+            {
+                binding: 1,
+                resource: {
+                    buffer: marchData.buffers.vertexOffsetTotals
+                }
+            }
+        ]
+    });
+
+    dataObj.marchData.bindGroups.indexOffset = device.createBindGroup({
+        layout: dataObj.marchData.pipelines.enumerate.getBindGroupLayout(3),
+        entries: [
+            {
+                binding: 0,
+                resource: {
+                    buffer: indexOffsetBuffer
+                }
+            },
+            {
+                binding: 1,
+                resource: {
+                    buffer: marchData.buffers.indexOffsetTotals
+                }
+            }
+        ]
+    });
+
+    // combined offset buffers into one bg
+    dataObj.marchData.bindGroups.combinedOffset = device.createBindGroup({
+        layout: dataObj.marchData.pipelines.march.getBindGroupLayout(3),
+        entries: [
+            {
+                binding: 0,
+                resource: {
+                    buffer: vertexOffsetBuffer
+                }
+            },
+            {
+                binding: 1,
+                resource: {
+                    buffer: indexOffsetBuffer
+                }
+            }
+        ]
+    });
+}
+
 async function getMarchCounts(dataObj, threshold) {
     const WGCount = dataObj.marchData.WGCount;
+    //console.log(WGCount);
     //const buffers 
 
     //var t0 = performance.now();
@@ -2024,6 +2032,7 @@ async function getMarchCounts(dataObj, threshold) {
     var commandEncoder = device.createCommandEncoder();
     // take up a fair amount of time
     // implement as compute shaders if they become a bottleneck
+    device.queue.writeBuffer(dataObj.marchData.buffers.data, 16, new Uint32Array([WGCount.x, WGCount.y, WGCount.z]));
     device.queue.writeBuffer(marchData.buffers.marchVars, 0, new Float32Array([transformThreshold(threshold, dataObj), 0, 0]));
     device.queue.writeBuffer(marchData.buffers.marchVars, 12, new Uint32Array([dataObj.marchData.cellScale]));
 
@@ -2153,19 +2162,24 @@ async function getMarchCounts(dataObj, threshold) {
 }
 
 async function march(dataObj, meshObj, threshold) {
+    
+    // enumeration pass =====================================================================
+    // finds the correct resolution to generate the mesh at and creates a per-WG offset buffer for
+    // verts and indices
     var vertNum, indNum;
 
     var triedScales = new Set();
     var workingScales = new Set();
     var currScale;
     var maxSize;
-    var maxStorage = device.limits.maxStorageBufferBindingSize/50;
+    var maxStorage = device.limits.maxStorageBufferBindingSize;
     
     while (true) {
         currScale = dataObj.marchData.cellScale
         //console.log(currScale);
         triedScales.add(currScale);
 
+        createOffsetBindGroups(dataObj);
         [vertNum, indNum] = await getMarchCounts(dataObj, threshold);
 
         maxSize = Math.max(vertNum*3*4, indNum*4);
@@ -2174,6 +2188,11 @@ async function march(dataObj, meshObj, threshold) {
         if (maxSize > maxStorage) {
             // increase the scale for more room
             dataObj.marchData.cellScale++;
+
+            dataObj.marchData.buffers.vertexOffset.destroy();
+            dataObj.marchData.buffers.indexOffset.destroy();
+            getWGCount(dataObj);
+            createOffsetBindGroups(dataObj);
         } else if (currScale > 1 && maxSize <= maxStorage*Math.pow((currScale-1)/currScale, 2)) {
             //console.log("tried increasing")
             // decrease the scale if we can
@@ -2184,12 +2203,17 @@ async function march(dataObj, meshObj, threshold) {
                 break;
             } else {
                 dataObj.marchData.cellScale = newScale;
+
+                dataObj.marchData.buffers.vertexOffset.destroy();
+                dataObj.marchData.buffers.indexOffset.destroy();
+                getWGCount(dataObj);
+                createOffsetBindGroups(dataObj);
             }
         } else {
             break;
         }
     }
-    console.log(currScale);
+    //console.log(currScale);
     // marching pass =====================================================================
 
     meshObj.indicesNum = indNum;

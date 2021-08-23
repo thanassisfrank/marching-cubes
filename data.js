@@ -132,6 +132,7 @@ var dataManager = {
                     this.limits[1] = v;
                 }
             }
+            console.log(this.limits);
         }
         this.generateNormals = function() {
             if (!this.normalsInitialised) {
