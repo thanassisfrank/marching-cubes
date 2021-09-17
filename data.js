@@ -3,36 +3,91 @@
 
 import {VecMath} from "./VecMath.js";
 import {vec3} from "https://cdn.skypack.dev/gl-matrix";
-import { newId } from "./utils.js";
+import { newId, dataTypes } from "./utils.js";
 export {dataManager};
+
+const blockSize = [4, 4, 4]
+
+// object that manages data object instances
+// types of data object creatable:
+// - from a function
+//   a function is supplied as well as dimensions and the full dataset is generated on creation
+// - from a file (simple)
+//   a source path is specified and the whole dataset is loaded on creation
+// - from a file (complex)
+//   a dataset name is specified and a coars global set of data is loaded on creation
+//   when marching, a finer set of data for the threshold region can be requested
 
 var dataManager = {
     datas: {},
+    // called by outside code to generate a new data object
+    // config object form:
+    // {
+    //     "name": "engine",
+    //     "path": "engine_256x256x128_uint8.raw",
+    //     "size": {
+    //         "x": 128,
+    //         "y": 256,
+    //         "z": 256
+    //     },
+    //     "cellSize": {
+    //         "x": 1,
+    //         "y": 1,
+    //         "z": 1
+    //     },
+    //     "dataType": "uint8"
+    //     "f": some function
+    // }
     createData: async function(config){
         const id = newId(this.datas);
         var newData = new this.Data(id);
-        if (config.src) {
+        if (config.name) {
+            // this is going to use the complex dataset handling mechanism
+            await newData.createComplex(config)
+        } else if (config.src) {
             // create a new data object from a file
             await newData.fromFile(config.src, config.dataType, config.x, config.y, config.z)
         } else if (config.f) {
             //create data from the supplied function
             newData.generateData(config.x, config.y, config.z, config.f);
         }
+        //newData.setCellSize()
         this.datas[id] = newData;
 
         return newData;
     },
     Data: function(id) {
         this.id = id;
+        // a set of data that covers the whole dataset
+        // complex:
+        // - a low resolution of whole dataset for fast scrolling
+        // simple:
+        // - the whole dataset
         this.data = [];
+        // used to store the limit values of each block if in complex mode
+        this.blockLimits = [];
+        // used to store fine data for complex mode
+        this.fineData = [];
+        // stores the dimensions of the dataset in blocks
+        this.blocksSize = [];
+        // flag for if this is a complex data object
+        this.complex = false;
         this.normals = [];
         this.normalsInitialised = false;
         this.normalsPopulated = false;
+
+        // these following attributes apply to the data stored in this.data
+        // simple:
+        // - these reflect the values for the actual dataset
+        // complex:
+        // - these reflect the values for the coarse, whole view
         this.maxSize = 0;
+        this.maxCellSize = 0;
         this.volume = 0;
         this.midPoint = [];
         this.size = [];
         this.cellSize = [1, 1, 1];
+
         this.limits = [undefined, undefined];
         // holds any information the marching implementation needs e.g. the data buffer on gpu
         this.marchData = {};
@@ -49,14 +104,19 @@ var dataManager = {
             this.normals[ind+1] = val[1];
             this.normals[ind+2] = val[2];
         }
-        this.initialise = function(x, y, z) {
+        // sets up the supporting attributs of the data using
+        // the dimensions of the data buffer in 3d: x, y, z
+        // the cell size: sx, sy, sz
+        this.initialise = function(x, y, z, sx, sy, sz) {
             this.normalsInitialised = false;
             this.normalsPopulated = false;
             this.volume = x * y * z;
             this.maxSize = Math.max(x, y, z);
-            this.midPoint = [(x-1)/2, (y-1)/2, (z-1)/2];
+            this.midPoint = [(x-1)/2*sx, (y-1)/2*sy, (z-1)/2*sz];
             this.size = [x, y, z];
             this.cellsCount = (x-1)*(y-1)*(z-1);
+            this.cellSize = [sx, sy, sz]
+            this.maxCellSize = Math.max(sx, sy, sz)
             this.initialised = true;
             console.log("initialised");
         }
@@ -78,7 +138,7 @@ var dataManager = {
                 }
             }
             console.log(this.limits);
-            this.initialise(x, y, z);
+            this.initialise(x, y, z, ...this.cellSize);
         };
         this.fromFile = function(src, DataType, x, y, z) {
             var that = this;
@@ -109,7 +169,7 @@ var dataManager = {
                             that.getLimits();
                             resolve(true);
                         });
-                        that.initialise(x, y, z);
+                        that.initialise(x, y, z, ...this.cellSize);
                     } else {
                         console.log(res.status)
                         resolve(false);
@@ -150,6 +210,167 @@ var dataManager = {
             }
             this.normalsPopulated = true;
         };
+        this.createComplex = async function(config) {
+            // first, save the config object
+            this.config = config;
+            // assess what resolution the coarse representation should be
+            // request the data at that resolution
+            // for now, request the data at a fixed scale
+            const scale = 2;
+            
+            const request = {
+                name: config.name,
+                mode: "whole",
+                // will be determined by benchmarking
+                cellScale: scale
+            }
+
+            // wait for the response
+            const response = await fetch("/data", {
+                method: "POST",
+                body: JSON.stringify(request)
+            });
+
+            // get its array buffer
+            var responseBuffer = await response.arrayBuffer();
+
+            // create an array of correct type and store in this.data
+            this.data = new dataTypes[config.dataType](responseBuffer);
+
+            // get the block limits data from the server
+            var pathSplit = config.path.split(".");
+            const limitsResponse = await fetch("/data/" + pathSplit[0] + "_limits." + pathSplit[1]);
+            const limitsBuffer = await limitsResponse.arrayBuffer();
+            this.blockLimits = new dataTypes[config.dataType](limitsBuffer)
+
+            // console.log(this.blockLimits)
+
+            this.blockLocations = new Int32Array(this.blockLimits.length/2);
+
+            //console.log(this.blockLimits)
+            this.blocksSize = [
+                Math.floor(config.size.x/blockSize[0]),
+                Math.floor(config.size.y/blockSize[1]),
+                Math.floor(config.size.z/blockSize[2])
+            ]
+
+            this.limits = config.limits;
+            console.log(this.limits)
+            this.initialise(
+                Math.floor(config.size.x/scale), 
+                Math.floor(config.size.y/scale), 
+                Math.floor(config.size.z/scale),
+                scale*config.cellSize.x,
+                scale*config.cellSize.y,
+                scale*config.cellSize.z,
+            );
+
+            this.complex = true;
+        }
+
+        // called to request and load fine data around the iosurface from the server
+        this.getFineData = async function(threshold) {
+            const request = {
+                name: this.config.name,
+                mode: "threshold",
+                threshold: threshold
+            }
+
+            var that = this;
+            
+            // get the fine data from the server but don't await
+            const fineData = fetch("/data", {
+                method: "POST",
+                body: JSON.stringify(request)
+            }).then(response => 
+                response.arrayBuffer().then(buffer => 
+                    new dataTypes[that.config.dataType](buffer)
+                )
+            )
+
+            // entries in active blocks gives the id of the block in the same position in this.data
+            this.activeBlocks = [];
+            // block locations is a list of all blocks and where they are in this.data if they are there
+            var l, r;
+            for (let i = 0; i < this.blockLimits.length/2; i++) {
+                l = this.blockLimits[2*i];
+                r = this.blockLimits[2*i + 1];
+                if (l <= threshold && r >= threshold) {
+                    this.blockLocations[i] = this.activeBlocks.length;
+                    this.activeBlocks.push(i);
+                } else {
+                    this.blockLocations[i] = -1;
+                }
+            }
+
+            // now await if the query to the server has not completed yet
+            this.fineData = await fineData;
+
+            //this.checkFine()
+
+            console.log(this.activeBlocks.length);
+            console.log(this.fineData.length/64);
+        }
+        
+        this.getFineDataBlocks = async function(threshold) {
+            // entries in active blocks gives the id of the block in the same position in this.data
+            this.activeBlocks = [];
+            // block locations is a list of all blocks and where they are in this.data if they are there
+            var l, r;
+            for (let i = 0; i < this.blockLimits.length/2; i++) {
+                l = this.blockLimits[2*i];
+                r = this.blockLimits[2*i + 1];
+                if (i == 16 + 24*8) console.log(l, r)
+                if (l <= threshold && r >= threshold ) {
+                    this.blockLocations[i] = this.activeBlocks.length;
+                    this.activeBlocks.push(i);
+                } else {
+                    this.blockLocations[i] = -1;
+                }
+            }            
+            this.fineData = await this.fetchBlocks(this.activeBlocks);
+        }
+        this.fetchBlocks = function(blocks) {
+            const request = {
+                name: this.config.name,
+                mode: "blocks",
+                blocks: this.activeBlocks
+            }
+
+            var that = this;
+
+            return fetch("/data", {
+                method: "POST",
+                body: JSON.stringify(request)
+            }).then(response => 
+                response.arrayBuffer().then(buffer => 
+                    new dataTypes[that.config.dataType](buffer)
+                )
+            )
+        }
+
+        // only works with 4x4x4 and when resolution is 1
+        this.fetchFineFromCoarse = function(blocks) {
+            var out = new dataTypes[this.config.dataType](blocks.length*64);
+            var num = 0;
+            let block_pos, i, j, k;
+            for (let blockNum = 0; blockNum < blocks.length; blockNum++) {
+                block_pos = getPos(blocks[blockNum], this.blocksSize);
+                for (let i_l = 0; i_l < 4; i_l++) {
+                    for (let j_l = 0; j_l < 4; j_l++) {
+                        for (let k_l = 0; k_l < 4; k_l++) {
+                            i = i_l + block_pos[0] * 4;
+                            j = j_l + block_pos[1] * 4;
+                            k = k_l + block_pos[2] * 4;
+                            out[num] = this.index(i, j, k);
+                            num += 1
+                        }
+                    }
+                }
+            }
+
+            return out;
+        }
         
         // returns normal vector that is not normalised
         // normalisation step is done by the fragment shader
@@ -190,8 +411,63 @@ var dataManager = {
             vec3.set(n, -dx, -dy, -dz);
             //vec3.normalize(n, n);
         };
+        this.checkFine = async function() {
+            var wrong = 0;
+            var wrongCoords = {
+                x: new Set(),
+                y: new Set(),
+                z: new Set()
+            }
+            var wrongBlocks = new Set;
+
+            for (let b = 0; b < this.activeBlocks.length; b++) {
+                let blockPos = [
+                    Math.floor(this.activeBlocks[b]/(this.blocksSize[1]*this.blocksSize[2])), 
+                    Math.floor((this.activeBlocks[b]/this.blocksSize[2])%this.blocksSize[1]), 
+                    Math.floor(this.activeBlocks[b]%this.blocksSize[2])
+                ];
+                
+                // var coarseBlock = [];
+                // var fineBlock = [];
+                for (let i = 0; i < 4; i++) {
+                    for (let j = 0; j < 4; j++) {
+                        for (let k = 0; k < 4; k++) {
+                            let x = blockPos[0]*4 + i;
+                            let y = blockPos[1]*4 + j;
+                            let z = blockPos[2]*4 + k;
+                            var val = this.index(x, y, z);
+                            var fineVal = this.fineData[b*64 + 16*i + 4*j + k]
+                            
+                            if (val != fineVal) {
+                                // wrongCoords.x.add(i);
+                                // wrongCoords.y.add(j);
+                                // wrongCoords.z.add(k);
+                                // wrongBlocks.add(this.activeBlocks[b]);
+                                wrong++;
+                            }
+                            // coarseBlock.push(val);
+                            // fineBlock.push(fineVal);
+                        }
+                    }
+                }                
+            }
+            console.log("wrong values:", wrong);
+            // console.log("wrong coords:", wrongCoords)
+        }
     },
     deleteData: function(data) {
         delete this.datas[data.id];
     }
+}
+
+function getPos(i, size) {
+    return [
+        Math.floor(i/(size[1]*size[2])), 
+        Math.floor(i/size[2])%size[1], 
+        i%size[2]
+    ];
+}
+
+function getIndex(x, y, z, size) {
+    return x*size[1]*size[2] + y*size[2] + z;
 }

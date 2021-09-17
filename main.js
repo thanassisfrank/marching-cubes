@@ -7,7 +7,7 @@ import {cameraManager} from "./camera.js";
 import { meshManager } from "./mesh.js";
 import { viewManager } from "./view.js";
 
-import {setRenderModule, setupRenderer} from "./render.js";
+import {setRenderModule, setupRenderer, resizeRenderingContext} from "./render.js";
 import {setupMarchModule, setMarchModule, setupMarch} from "./march.js";
 
 setMarchModule("gpu");
@@ -74,15 +74,19 @@ const datasets = {
     }
 }
 
-
 document.body.onload = main;
 
 async function main() {
     var canvas = get("c");
     setupCanvasDims(canvas);
 
+    const datasetsComplex = await fetch("/datasets.json").then((res) => res.json())
+    await setupMarchModule();
+    var ctx = await setupRenderer(canvas); 
+
     document.body.onresize = function() {
         setupCanvasDims(canvas);
+        resizeRenderingContext(ctx)
     }
     var waiting = false;
     document.body.onscroll = function() {
@@ -96,8 +100,7 @@ async function main() {
     }
 
 
-    await setupMarchModule();
-    var ctx = await setupRenderer(canvas);
+    
 
     if (!ctx) return;
 
@@ -128,10 +131,13 @@ async function main() {
         mesh: mesh1
     });
 
-    document.body.onkeypress = function(e) {
+    document.body.onkeydown = function(e) {
         switch (e.key) {
             case " ":
                 console.table(view1.threshold);
+                break;
+            case "Alt":
+                e.preventDefault();
                 break;
         }
     }

@@ -5,7 +5,7 @@ import * as gpu from "./webGPU.js";
 import * as gl from "./webgl.js";
 import {module as marchModule} from "./march.js";
 
-export {setRenderModule, setupRenderer, createBuffers, updateMeshBuffers, renderView, deleteBuffers, clearScreen};
+export {setRenderModule, setupRenderer, createBuffers, updateMeshBuffers, renderView, deleteBuffers, clearScreen, resizeRenderingContext};
 
 var module;
 
@@ -72,5 +72,11 @@ function clearScreen(...args) {
         return gpu.clearScreen(...args);
     } else {
         return gl.clearScreen(...args);
+    }
+}
+
+function resizeRenderingContext(...args) {
+    if (module == "gpu") {
+        return gpu.resizeRenderingContext(...args)
     }
 }

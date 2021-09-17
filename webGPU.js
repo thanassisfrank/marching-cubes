@@ -2,9 +2,9 @@
 // handles the webgpu api
 // generating mesh and rendering
 
-import { stringFormat } from "./utils.js";
+import { stringFormat, clampBox } from "./utils.js";
 
-export {setupMarchModule, setupMarch, march, setupRenderer, createBuffers, updateBuffers, renderView, deleteBuffers, clearScreen};
+export {setupMarchModule, setupMarch, march, marchFine, setupRenderer, createBuffers, updateBuffers, renderView, deleteBuffers, clearScreen, resizeRenderingContext};
 
 
 const WGSize = {
@@ -568,834 +568,50 @@ const triTable = [
     -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1
 ];
 
-const tablesLength = vertCoordTable.length + edgeTable.length + edgeToVertsTable.length + triTable.length;
+// a mapping from relative coordinates of where the point is adjacent to neighbouring cells
+// to a code
+const neighbourTable = [
+    0, 0, 0, // 0 (points in the body)
+    0, 0, 1, // 1 z+ face
+    0, 1, 0, // 2 y+ face
+    0, 1, 1, // 3 x+ edge
+    1, 0, 0, // 4 x+ face
+    1, 0, 1, // 5 y+ edge
+    1, 1, 0, // 6 z+ edge
+    1, 1, 1  // 7 corner
+]
+
+// for each entry 
+const neighbourCellsTable = [
+    -1, -1, -1, -1, -1, -1, -1, // the cell itself
+     1, -1, -1, -1, -1, -1, -1, // z+ face neighbour
+     2, -1, -1, -1, -1, -1, -1, // y+ face neighbour
+     1,  2,  3, -1, -1, -1, -1, // x+ edge neighbour
+     4, -1, -1, -1, -1, -1, -1, // x+ face neighbour
+     1,  4,  5, -1, -1, -1, -1, // y+ edge neighbour
+     2,  4,  6, -1, -1, -1, -1,// z+ edge neighbour
+     1,  2,  3,  4,  5,  6,  7// corner neighbour 
+
+]
+
+const tablesLength = vertCoordTable.length + edgeTable.length + edgeToVertsTable.length + triTable.length + neighbourCellsTable.length;
 
 // shader programs ################################################################################################
-const shaderCode = `
-    [[block]]
-    struct Uniform {
-        pMat : mat4x4<f32>;
-        mvMat : mat4x4<f32>;
-    };
-
-    struct VertexOut {
-        [[builtin(position)]] position : vec4<f32>;
-        [[location(0)]] normal : vec3<f32>;
-        [[location(1)]] eye : vec3<f32>;
-        [[location(2)]] worldPos : vec3<f32>;
-    };
-
-    struct Light {
-        dir : vec3<f32>;
-        color : vec3<f32>;
-    };
-
-    [[group(0), binding(0)]] var<uniform> u : Uniform;
-
-    
-    [[stage(vertex)]]
-    fn vertex_main([[location(0)]] position: vec3<f32>,
-                    [[location(1)]] normal: vec3<f32>) -> VertexOut
-    {
-        var out : VertexOut;
-        var vert : vec4<f32> = u.mvMat * vec4<f32>(position, 1.0);
-        
-        out.position = u.pMat * vert;
-        out.normal = normal;
-        out.eye = -vec3<f32>(vert.xyz);
-        out.worldPos = position;
-
-        return out;
-    }
-
-    [[stage(fragment)]]
-    fn fragment_main(
-        [[builtin(front_facing)]] frontFacing : bool, 
-        data: VertexOut
-    ) 
-        -> [[location(0)]] vec4<f32>
-    {
-        
-        var light1 : Light;
-        light1.dir = vec3<f32>(0.0, 0.0, -1.0);
-        light1.color = vec3<f32>(1.0);
-
-        var diffuseColor = vec3<f32>(0.1, 0.7, 0.6);
-        let specularColor = vec3<f32>(1.0);
-        let shininess : f32 = 50.0;
-
-        var E = normalize(data.eye);
-        //var N = normalize(data.normal);
-        var N = -normalize(cross(dpdx(data.eye), dpdy(data.eye)));
-
-        if (frontFacing) {
-            diffuseColor = vec3<f32>(0.7, 0.2, 0.2);
-            //N = -N;
-        }
-        
-        var diffuseFac = max(dot(-N, light1.dir), 0.0);
-        
-        var diffuse : vec3<f32>;
-        var specular : vec3<f32>;
-        var ambient : vec3<f32> = diffuseColor*0.3;
-        
-        var reflected : vec3<f32>;
-
-        if (diffuseFac > 0.0) {
-            diffuse = diffuseColor*light1.color*diffuseFac;
-
-            reflected = reflect(light1.dir, N);
-            var specularFac : f32 = pow(max(dot(reflected, E), 0.0), shininess);
-            specular = specularColor*light1.color*specularFac;
-        }
-        var matCol = diffuse + specular + ambient;
-        var fogCol = vec3<f32>(0.9, 0.9, 0.9);
-        return vec4<f32>(mix(fogCol, matCol, data.position.z), 1.0);
-        //return vec4<f32>(N, 1.0);
-    }          
-`
-
-const enumerateCode = `
-[[block]] struct Data {
-    [[size(16)]] size :  vec3<u32>;
-    [[size(16)]] WGNum :  vec3<u32>;
-    data :  array<u32>;
-};
-[[block]] struct Arr {
-    data : array<i32>;
-};
-[[block]] struct Vars {
-    threshold : f32;
-    vertCount : atomic<u32>;
-    indexCount : atomic<u32>;
-    cellScale : u32;
-};
-[[block]] struct Tables {
-    vertCoord : array<array<u32, 3>, 8>;
-    edge : array<array<i32, 12>, 256>;
-    edgeToVerts : array<array<i32, 2>, 12>;
-    tri : array<array<i32, 15>, 256>;
-};
-[[block]] struct U32Buffer {
-    buffer : array<u32>;
-};
-[[block]] struct TotalsBuffer {
-    val : atomic<u32>;
-    buffer : array<u32>;
-};
-
-[[group(0), binding(0)]] var<storage, read> d : Data;
-[[group(0), binding(1)]] var<storage, read> tables : Tables;
-
-[[group(1), binding(0)]] var<storage, read_write> vars : Vars;
-
-[[group(2), binding(0)]] var<storage, read_write> WGVertOffsets : U32Buffer;
-[[group(2), binding(1)]] var<storage, read_write> WGVertOffsetsTotals : TotalsBuffer;
-
-[[group(3), binding(0)]] var<storage, read_write> WGIndexOffsets : U32Buffer;
-[[group(3), binding(1)]] var<storage, read_write> WGIndexOffsetsTotals : TotalsBuffer;
-
-var<workgroup> localVertOffsets : array<u32, ${WGSize.x*WGSize.y*WGSize.z}>;
-var<workgroup> localIndexOffsets : array<u32, ${WGSize.x*WGSize.y*WGSize.z}>;
-
-
-
-fn getIndex3d(x : u32, y : u32, z : u32, size : vec3<u32>) -> u32 {
-    return size.y * size.z * x + size.z * y + z;
+function fetchShader(name) {
+    return fetch("shaders/" + name + ".wgsl").then(response => response.text());
 }
 
-fn getVertCount(code : u32) -> u32 {
-    var i = 0u;
-    loop {
-        if (i == 12u || tables.edge[code][i] == -1) {
-            break;
-        }
-        i = i + 1u;
-    }
-    return i;
-}
-fn getIndexCount(code : u32) -> u32 {
-    var i = 0u;
-    loop {
-        if (i == 15u || tables.tri[code][i] == -1) {
-            break;
-        }
-        i = i + 1u;
-    }
-    return i;
-}
+var shaderCode = fetchShader("shader");
 
-fn unpack(val: u32, i : u32, packing : u32) -> f32{
-    if (packing == 4u){
-        return unpack4x8unorm(val)[i];
-    }
-    return bitcast<f32>(val);
-}
-
-fn getVal(x : u32, y : u32, z : u32, packing : u32) -> f32 {
-    var a = getIndex3d(x, y, z, d.size);
-    return unpack(d.data[a/packing], a%packing, packing);
-}
-
-[[stage(compute), workgroup_size(${WGSize.x}, ${WGSize.y}, ${WGSize.z})]]
-fn main(
-    [[builtin(global_invocation_id)]] id : vec3<u32>, 
-    [[builtin(local_invocation_index)]] localIndex : u32,
-    [[builtin(workgroup_id)]] WGId : vec3<u32>
-) {                
-    var cellScale = vars.cellScale;
-    var packing = {{packing}}u;
-    var code = 0u;
-    var thisVertCount = 0u;
-    var thisIndexCount = 0u;
-    var WGSize = ${WGSize.x*WGSize.y*WGSize.z}u;
-
-    // if outside of data, return
-    var cells : vec3<u32> = vec3<u32>(d.size.x - 1u, d.size.y - 1u, d.size.z - 1u);      
-    // needs changing
-    if (
-        (id.x + 1u)*cellScale < d.size.x && 
-        (id.y + 1u)*cellScale < d.size.y && 
-        (id.z + 1u)*cellScale < d.size.z
-    ) {        
-        var c : array<u32, 3>;
-        var i = 0u;
-        loop {
-            if (i == 8u) {
-                break;
-            }
-            // the coordinate of the vert being looked at
-            c = tables.vertCoord[i];
-            var val = getVal((id.x + c[0])*cellScale, (id.y + c[1])*cellScale, (id.z + c[2])*cellScale, packing);
-            if (val > vars.threshold) {
-                code = code | (1u << i);
-            }
-            continuing {
-                i = i + 1u;
-            }
-        }
-        thisVertCount = getVertCount(code);
-        thisIndexCount = getIndexCount(code);
-
-    }
-
-    localVertOffsets[localIndex] = thisVertCount;
-    localIndexOffsets[localIndex] = thisIndexCount;
-
-    var halfl = WGSize >> 1u;
-    var r = halfl;
-    var offset = 1u;
-    var left = 0u;
-    var right = 0u;
-
-    loop {
-        if (r == 0u) {
-            break;
-        }
-        workgroupBarrier();
-        if (localIndex < halfl) {
-            // if in the first half, sort the vert counts
-            if (localIndex < r) {
-                left = offset * (2u * localIndex + 1u) - 1u;
-                right = offset * (2u * localIndex + 2u) - 1u;
-                localVertOffsets[right] = localVertOffsets[left] + localVertOffsets[right];
-            }
-        } else {
-            if (localIndex - halfl < r) {
-                left = offset * (2u * (localIndex - halfl) + 1u) - 1u;
-                right = offset * (2u * (localIndex - halfl) + 2u) - 1u;
-                localIndexOffsets[right] = localIndexOffsets[left] + localIndexOffsets[right];
-            }
-        }
-        
-        continuing {
-            r = r >> 1u;
-            offset = offset << 1u;
-        }
-    }
-    if (localIndex == 0u) {
-        WGVertOffsets.buffer[getIndex3d(WGId.x, WGId.y, WGId.z, d.WGNum)] = localVertOffsets[WGSize - 1u];
-        //ignore(atomicAdd(&vars.vertCount, localVertOffsets[WGSize - 1u]));
-    }
-    if (localIndex == 1u) {
-        WGIndexOffsets.buffer[getIndex3d(WGId.x, WGId.y, WGId.z, d.WGNum)] = localIndexOffsets[WGSize - 1u];
-        //ignore(atomicAdd(&vars.indexCount, localIndexOffsets[WGSize - 1u]));
-    }
-}
-`;
+var enumerateCode = fetchShader("enumerate");
+var enumerateFineCode = fetchShader("enumerateFine");
 
 // general prefix sum applied to the buffer in group(0) binding(0)
-const prefixSumA = `
-    [[block]] struct U32Buffer {
-        buffer : array<u32>;
-    };
-    [[block]] struct TotalsBuffer {
-        val : u32;
-        carry : u32;
-        buffer : array<u32>;
-    };
-    [[block]] struct U32Val {
-        val : u32;
-    };
+var prefixSumACode = fetchShader("prefixSumA");
+var prefixSumBCode = fetchShader("prefixSumB");
 
-    [[group(0), binding(0)]] var<storage, read_write> buffer : U32Buffer;
-    [[group(0), binding(1)]] var<storage, read_write> totals : TotalsBuffer;
-
-    [[group(1), binding(0)]] var<storage> bufferOffset : U32Val;
-
-    var<workgroup> blockOffset : u32;
-
-    [[stage(compute), workgroup_size(${WGPrefixSumCount})]]
-    fn main(
-        [[builtin(global_invocation_id)]] gid : vec3<u32>, 
-        [[builtin(local_invocation_id)]] lid : vec3<u32>,
-        [[builtin(workgroup_id)]] wid : vec3<u32>
-    ) {
-        // algorithm:
-        // 1. each WG performs prefix sum on their own block of the buffer (512 elements)
-        //  a. sweep up the data
-        //  b. extract the total value
-        //  c. sweep down to complete for that block
-        // 2. whole buffer is scanned
-        //  a. block totals are transferred to totalsBuffer
-        //  b. block totals are scanned by WG 0
-        //   i. sweep up totals buffer
-        //   ii. extract the total sum from last position (store)
-        //   iii. sweep down to finish
-        //  c. add scanned block total i to elements of block i by its WG 
-        
-        var blockLength = ${2*WGPrefixSumCount}u;
-        // calculate this value properly or receive in a buffer
-        //                                  ^^^^^^^^^^^^^^^^^^^
-        //var numBlocks = blockLength;//arrayLength(&buffer.buffer)/blockLength;
-        var numBlocks = blockLength;//min(blockLength, (arrayLength(&buffer.buffer)-bufferOffset.val)/blockLength);
-
-        
-        if(lid.x == 0u) {
-            blockOffset = (wid.x + bufferOffset.val) * blockLength ;
-        }
-        
-        
-
-        var d = blockLength >> 1u;
-        var offset = 1u;
-        var left = 0u;
-        var right = 0u;
-
-        loop {
-            if (d == 0u) {
-                break;
-            }
-            workgroupBarrier();
-            storageBarrier();
-            if (lid.x < d) {
-                left = offset * (2u * lid.x + 1u) - 1u + blockOffset;
-                right = offset * (2u * lid.x + 2u) - 1u + blockOffset;
-                buffer.buffer[right] = buffer.buffer[left] + buffer.buffer[right];
-            }
-            continuing {
-                d = d >> 1u;
-                offset = offset << 1u;
-            }
-        }
-        if (lid.x == 0u) {
-            if (numBlocks == 1u) {
-                totals.val = buffer.buffer[blockLength - 1u];
-            } else {
-                totals.buffer[wid.x] = buffer.buffer[blockLength - 1u + blockOffset];
-            }
-            buffer.buffer[blockLength - 1u + blockOffset] = 0u;
-        }
-
-        d = 1u;
-        var t : u32;
-        loop {
-            if (d == blockLength) {
-                break;
-            }
-            offset = offset >> 1u;
-            workgroupBarrier();
-            storageBarrier();
-
-            if (lid.x < d) {
-                left = offset * (2u * lid.x + 1u) - 1u + blockOffset;
-                right = offset * (2u * lid.x + 2u) - 1u + blockOffset;
-                t = buffer.buffer[left];
-                buffer.buffer[left] = buffer.buffer[right];
-                buffer.buffer[right] = buffer.buffer[right] + t;
-            }
-            
-            continuing {
-                d = 2u * d;
-            }
-        }
-    }
-
-`
-const prefixSumB = `
-    [[block]] struct U32Buffer {
-        buffer : array<u32>;
-    };
-    [[block]] struct TotalsBuffer {
-        val : u32;
-        carry : u32;
-        buffer : array<u32>;
-    };
-    [[block]] struct U32Val {
-        val : u32;
-    };
-
-    [[group(0), binding(0)]] var<storage, read_write> buffer : U32Buffer;
-    [[group(0), binding(1)]] var<storage, read_write> totals : TotalsBuffer;
-
-    [[group(1), binding(0)]] var<storage> bufferOffset : U32Val;
-
-    var<workgroup> blockOffset : u32;
-
-    // credit to : https://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
-    fn nextPowerOf2(a : u32) -> u32 {
-        var v : u32 = a;
-        v = v - 1u;
-        v = v | v >> 1u;
-        v = v | v >> 2u;
-        v = v | v >> 4u;
-        v = v | v >> 8u;
-        v = v | v >> 16u;
-        v = v + 1u;
-        return v;
-    }
-
-    [[stage(compute), workgroup_size(${WGPrefixSumCount})]]
-    fn main(
-        [[builtin(global_invocation_id)]] gid : vec3<u32>, 
-        [[builtin(local_invocation_id)]] lid : vec3<u32>,
-        [[builtin(workgroup_id)]] wid : vec3<u32>
-    ) {                    
-        if(lid.x == 0u) {
-            blockOffset = 2u*gid.x;
-        }
-        
-        var blockLength = ${2*WGPrefixSumCount}u;
-        // set to 512 for now, will make dynamic later
-        var numBlocks = blockLength;//arrayLength(&buffer.buffer)/blockLength;
-        
-        // only need to consider this section
-        var length : u32 = min(blockLength, nextPowerOf2(numBlocks));
-        
-        var d = length >> 1u;
-        var offset = 1u;
-        var left = 0u;
-        var right = 0u;
-
-        // scan the block totals (only 1 WG)
-
-        loop {
-            if (d == 0u) {
-                break;
-            }
-            workgroupBarrier();
-            storageBarrier();
-            if (gid.x < d) {
-                left = offset * (2u * gid.x + 1u) - 1u;
-                right = offset * (2u * gid.x + 2u) - 1u;
-                totals.buffer[right] = totals.buffer[left] + totals.buffer[right];
-            }
-            continuing {
-                d = d >> 1u;
-                offset = offset << 1u;
-            }
-        }
-        if (gid.x == 0u) {
-            totals.val = totals.buffer[length - 1u];
-            totals.buffer[length - 1u] = 0u;
-        }
-
-        d = 1u;
-        var t : u32;
-        loop {
-            if (d == length) {
-                break;
-            }
-            offset = offset >> 1u;
-            workgroupBarrier();
-            storageBarrier();
-
-            if (gid.x < d) {
-                left = offset * (2u * gid.x + 1u) - 1u;
-                right = offset * (2u * gid.x + 2u) - 1u;
-                t = totals.buffer[left];
-                totals.buffer[left] = totals.buffer[right];
-                // this line is problematic when numblocks > 64 (i.e. 128)
-                totals.buffer[right] = totals.buffer[right] + t;
-            }
-            
-            continuing {
-                d = 2u * d;
-            }
-        }
-        workgroupBarrier();
-        storageBarrier();
-        if (lid.x < numBlocks) {
-            var i = 0u;
-            loop {
-                if (i == blockLength) {
-                    break;
-                }
-                buffer.buffer[i + (2u*lid.x + bufferOffset.val)*blockLength] = totals.buffer[2u*lid.x] + buffer.buffer[i + (2u*lid.x + bufferOffset.val)*blockLength] + totals.carry;
-                buffer.buffer[i + (2u*lid.x+1u + bufferOffset.val)*blockLength] = totals.buffer[2u*lid.x + 1u] + buffer.buffer[i + (2u*lid.x+1u + bufferOffset.val)*blockLength] + totals.carry;
-                continuing {
-                    i = i + 1u;
-                }
-            }
-        }   
-        if (gid.x == 0u) {
-            totals.carry = totals.carry + totals.val;
-        }                 
-    }
-`
-
-const marchCodeNew = `
-[[block]] struct Data {
-    [[size(16)]] size : vec3<u32>;
-    [[size(16)]] WGNum : vec3<u32>;
-    data : array<u32>;
-};
-[[block]] struct Vars {
-    threshold : f32;
-    currVert : atomic<u32>;
-    currIndex : atomic<u32>;
-    cellScale : u32;
-};
-[[block]] struct Tables {
-    vertCoord : array<array<u32, 3>, 8>;
-    edge : array<array<i32, 12>, 256>;
-    edgeToVerts : array<array<i32, 2>, 12>;
-    tri : array<array<i32, 15>, 256>;
-};
-[[block]] struct F32Buff {
-    buffer : array<f32>;
-};
-[[block]] struct U32Buff {
-    buffer : array<u32>;
-};
-[[block]] struct Atoms {
-    vert : atomic<u32>;
-    index : atomic<u32>;
-};
-
-[[group(0), binding(0)]] var<storage, read> d : Data;
-[[group(0), binding(1)]] var<storage, read> tables : Tables;
-
-[[group(1), binding(0)]] var<storage, read_write> vars : Vars;
-
-[[group(2), binding(0)]] var<storage, read_write> verts : F32Buff;
-[[group(2), binding(1)]] var<storage, read_write> normals : F32Buff;
-[[group(2), binding(2)]] var<storage, read_write> indices : U32Buff;
-
-[[group(3), binding(0)]] var<storage, read_write> WGVertOffsets : U32Buff;
-[[group(3), binding(1)]] var<storage, read_write> WGIndexOffsets : U32Buff;
-
-var<workgroup> localVertOffsets : array<u32, ${WGSize.x*WGSize.y*WGSize.z}>;
-var<workgroup> localIndexOffsets : array<u32, ${WGSize.x*WGSize.y*WGSize.z}>;
-var<workgroup> localVertOffsetsAtom : atomic<u32>;
-var<workgroup> localIndexOffsetsAtom : atomic<u32>;
-
-fn getIndex3d(x : u32, y : u32, z : u32, size : vec3<u32>) -> u32 {
-    return size.y * size.z * x + size.z * y + z;
-}
-
-fn unpack(val: u32, i : u32, packing : u32) -> f32{
-    if (packing == 4u){
-        return unpack4x8unorm(val)[i];
-    }
-    return bitcast<f32>(val);
-}
-
-fn getVal(x : u32, y : u32, z : u32, packing : u32, cellScale : u32) -> f32 {
-    var a = getIndex3d(x*cellScale, y*cellScale, z*cellScale, d.size);
-    return unpack(d.data[a/packing], a%packing, packing);
-}
-
-
-[[stage(compute), workgroup_size(${WGSize.x}, ${WGSize.y}, ${WGSize.z})]]
-fn main(
-    [[builtin(global_invocation_id)]] id : vec3<u32>,
-    [[builtin(local_invocation_index)]] localIndex : u32,
-    [[builtin(workgroup_id)]] wgid : vec3<u32>
-) {         
-    
-    var WGSize = ${WGSize.x*WGSize.y*WGSize.z}u;
-    
-    var cellScale = vars.cellScale;
-    var packing = {{packing}}u;
-    var code = 0u;
-
-    var vertNum : u32 = 0u;
-    var indexNum : u32 = 0u;
-
-    var gridNormals : array<array<f32, 3>, 8>;
-
-    var thisVerts : array<f32, 36>;
-    var thisNormals : array<f32, 36>;
-    var thisIndices : array<u32, 15>;
-
-    var globalIndex : u32 = getIndex3d(id.x, id.y, id.z, d.size);
-
-    // if outside of data, return
-    var cells : vec3<u32> = vec3<u32>(d.size.x - 1u, d.size.y - 1u, d.size.z - 1u);
-    if (
-        (id.x + 1u)*cellScale >= d.size.x ||
-        (id.y + 1u)*cellScale >= d.size.y || 
-        (id.z + 1u)*cellScale >= d.size.z
-    ) {
-        // code remains 0
-        code = 0u;
-    } else {
-        // calculate the code   
-        var coord : array<u32, 3>;
-        var i = 0u;
-        loop {
-            if (i == 8u) {
-                break;
-            }
-            // the coordinate of the vert being looked at
-            coord = tables.vertCoord[i];
-            var val : f32 = getVal(id.x + coord[0], id.y + coord[1], id.z + coord[2], packing, cellScale);
-            if (val > vars.threshold) {
-                code = code | (1u << i);
-            }
-            continuing {
-                i = i + 1u;
-            }
-        }
-    }
-
-    
-    if (code > 0u && code < 255u) {
-        // get a code for the active vertices
-        var edges : array<i32, 12> = tables.edge[code];
-        var activeVerts = 0u;
-        var i = 0u;
-        loop {
-            if (i == 12u || edges[i] == -1){
-                break;
-            }
-            var c : array<i32, 2> = tables.edgeToVerts[edges[i]];
-            activeVerts = activeVerts | 1u << u32(c[0]);
-            activeVerts = activeVerts | 1u << u32(c[1]);
-            continuing {
-                i = i + 1u;
-            }
-        }
-        // get grad of grid points
-    
-        
-        // CHANGE TO INCLUDE CELLSIZE
-
-        // i= 0u;
-        // loop {
-        //     if (i == 8u) {
-        //         break;
-        //     }
-        //     if ((activeVerts & (1u << i)) == (1u << i)) {
-        //         var a : array<u32, 3> = tables.vertCoord[i];
-        //         var X = id.x + a[0];
-        //         var Y = id.y + a[1];
-        //         var Z = id.z + a[2];
-        //         var thisVal = getVal(id.x + a[0], id.y + a[1], id.z + a[2], packing);
-
-        //         // x(i) component
-        //         if (X > 0u) {
-        //             if (X < d.size[0] - 2u){
-        //                 gridNormals[i][0] = -((getVal(X + 1u, Y, Z, packing) - getVal(X - 1u, Y, Z, packing))/2.0);
-        //             } else {
-        //                 gridNormals[i][0] = -(thisVal - getVal(X - 1u, Y, Z, packing));
-        //             }
-        //         } else {
-        //             gridNormals[i][0] = -(getVal(X + 1u, Y, Z, packing) - thisVal);
-        //         }
-
-        //         // y(Y) component
-        //         if (Y > 0u) {
-        //             if (Y < d.size[1] - 2u){
-        //                 gridNormals[i][1] = -((getVal(X, Y + 1u, Z, packing) - getVal(X, Y - 1u, Z, packing))/2.0);
-        //             } else {
-        //                 gridNormals[i][1] = -(thisVal - getVal(X, Y - 1u, Z, packing));
-        //             }
-        //         } else {
-        //             gridNormals[i][1] = -(getVal(X, Y + 1u, Z, packing) - thisVal);
-        //         }
-
-        //         // z(Z) component
-        //         if (Z > 0u) {
-        //             if (Z < d.size[2] - 2u){
-        //                 gridNormals[i][2] = -((getVal(X, Y, Z + 1u, packing) - getVal(X, Y, Z - 1u, packing))/2.0);
-        //             } else {
-        //                 gridNormals[i][2] = -(thisVal - getVal(X, Y, Z - 1u, packing));
-        //             }
-        //         } else {
-        //             gridNormals[i][2] = -(getVal(X, Y, Z + 1u, packing) - thisVal);
-        //         }
-        //     }
-        //     continuing {
-        //         i = i + 1u;
-        //     }
-        // }
-        // vertices will be produced
-
-        // get vertices
-        
-        i = 0u;
-        loop {
-            if (i == 12u || edges[i] == -1) {
-                break;
-            }
-            var c : array<i32, 2> = tables.edgeToVerts[edges[i]];
-            var a : array<u32, 3> = tables.vertCoord[c[0]];
-            var b : array<u32, 3> = tables.vertCoord[c[1]];
-            var va : f32 = getVal(id.x + a[0], id.y + a[1], id.z + a[2], packing, cellScale);
-            var vb : f32 = getVal(id.x + b[0], id.y + b[1], id.z + b[2], packing, cellScale);
-            var fac : f32 = (vars.threshold - va)/(vb - va);
-            // fill vertices
-            thisVerts[3u*i + 0u] = (mix(f32(a[0]), f32(b[0]), fac) + f32(id.x)) * f32(cellScale);
-            thisVerts[3u*i + 1u] = (mix(f32(a[1]), f32(b[1]), fac) + f32(id.y)) * f32(cellScale);
-            thisVerts[3u*i + 2u] = (mix(f32(a[2]), f32(b[2]), fac) + f32(id.z)) * f32(cellScale);
-            // fill normals
-            // thisNormals[3u*i + 0u] = mix(gridNormals[c[0]][0], gridNormals[c[1]][0], fac);
-            // thisNormals[3u*i + 1u] = mix(gridNormals[c[0]][1], gridNormals[c[1]][1], fac);
-            // thisNormals[3u*i + 2u] = mix(gridNormals[c[0]][2], gridNormals[c[1]][2], fac);
-
-            continuing {
-                i = i + 1u;
-            }
-        }
-        vertNum = i;
-
-        // get count of indices
-        i = 0u;
-        loop {
-            if (i == 15u || tables.tri[code][i] == -1) {
-                break;
-            }
-            continuing {
-                i = i + 1u;
-            }
-        }
-
-        indexNum = i;
-
-        localVertOffsets[localIndex] = vertNum;
-        localIndexOffsets[localIndex] = indexNum;
-    }
-
-    // perform prefix sum of offsets for workgroup
-    var halfl = WGSize/2u;
-    var r = halfl;
-    var offset = 1u;
-    var left = 0u;
-    var right = 0u;
-
-    loop {
-        if (r == 0u) {
-            break;
-        }
-        workgroupBarrier();
-        storageBarrier();
-        if (localIndex < halfl) {
-            // if in the first half, sort the vert counts
-            if (localIndex < r) {
-                left = offset * (2u * localIndex + 1u) - 1u;
-                right = offset * (2u * localIndex + 2u) - 1u;
-                localVertOffsets[right] = localVertOffsets[left] + localVertOffsets[right];
-            }
-        } else {
-            if (localIndex - halfl < r) {
-                left = offset * (2u * (localIndex - halfl) + 1u) - 1u;
-                right = offset * (2u * (localIndex - halfl) + 2u) - 1u;
-                localIndexOffsets[right] = localIndexOffsets[left] + localIndexOffsets[right];
-            }
-        }
-        
-        continuing {
-            r = r >> 1u;
-            offset = offset << 1u;
-        }
-    }
-
-    workgroupBarrier();
-    storageBarrier();
-    var last = WGSize - 1u;
-    if (localIndex == 0u) {
-        localVertOffsets[last] = 0u;
-        
-    } elseif (localIndex == halfl) {
-        localIndexOffsets[last] = 0u;
-    }
-    
-    r = 1u;
-    var t : u32;
-    loop {
-        if (r == WGSize) {
-            break;
-        }
-        offset = offset >> 1u;
-        workgroupBarrier();
-        storageBarrier();
-        if (localIndex < halfl) {
-            if (localIndex < r) {
-                left = offset * (2u * localIndex + 1u) - 1u;
-                right = offset * (2u * localIndex + 2u) - 1u;
-                t = localVertOffsets[left];
-                localVertOffsets[left] = localVertOffsets[right];
-                localVertOffsets[right] = localVertOffsets[right] + t;
-            }
-        } else {
-            if (localIndex - halfl < r) {
-                left = offset * (2u * (localIndex - halfl) + 1u) - 1u;
-                right = offset * (2u * (localIndex - halfl) + 2u) - 1u;
-                t = localIndexOffsets[left];
-                localIndexOffsets[left] = localIndexOffsets[right];
-                localIndexOffsets[right] = localIndexOffsets[right] + t;
-            }
-        }
-        
-        continuing {
-            r = 2u * r;
-        }
-    }
-
-    if (vertNum > 0u && indexNum > 0u) {
-        //var vertOffset : u32 = WGVertOffsets.buffer[getIndex3d(wgid.x, wgid.y, wgid.z, d.WGNum)] + atomicAdd(&localVertOffsetsAtom, vertNum);
-        var vertOffset : u32 = WGVertOffsets.buffer[getIndex3d(wgid.x, wgid.y, wgid.z, d.WGNum)] + localVertOffsets[localIndex];
-        //var indexOffset : u32 = WGIndexOffsets.buffer[getIndex3d(wgid.x, wgid.y, wgid.z, d.WGNum)] + atomicAdd(&localIndexOffsetsAtom, indexNum);
-        var indexOffset : u32 = WGIndexOffsets.buffer[getIndex3d(wgid.x, wgid.y, wgid.z, d.WGNum)] + localIndexOffsets[localIndex];
-
-        var i = 0u;
-        loop {
-            if (i == vertNum*3u) {
-                break;
-            }
-            verts.buffer[3u*(vertOffset) + i] = thisVerts[i];
-            //normals.buffer[3u*(vertOffset) + i] = thisNormals[i];
-
-            continuing {
-                i = i + 1u;
-            }
-        }
-
-        i = 0u;
-        loop {
-            if (i == indexNum) {
-                break;
-            }
-            indices.buffer[indexOffset + i] = u32(tables.tri[code][i]) + vertOffset;//indexNum;//localIndexOffsets[localIndex] + i;//
-            continuing {
-                i = i + 1u;
-            }
-        }
-    }
-}
-`;
+var marchCode = fetchShader("march");
+var marchFineCode = fetchShader("marchFine");
 
 // ################################################################################################################
 function getNewBufferId() {
@@ -1474,10 +690,14 @@ async function setupMarchModule() {
     createGlobalBuffers();
     createBindGroupLayouts();
     createGlobalBindGroups();
+
+    prefixSumACode = await prefixSumACode;
+    prefixSumBCode = await prefixSumBCode;
+
+    marchData.pipelines.prefix = createPrefixSumPipelines();
 }
 
 function createGlobalBuffers() {
-    // global table buffer
     //set the various tables needed
     var tableBuffer = device.createBuffer({
         size: tablesLength * Uint32Array.BYTES_PER_ELEMENT,
@@ -1487,17 +707,16 @@ function createGlobalBuffers() {
 
     var range = tableBuffer.getMappedRange();
     var currOff = 0;
-    for (let t of [vertCoordTable, edgeTable, edgeToVertsTable, triTable]) { 
-        new Uint32Array(range, currOff*4, t.length).set(t);
+    for (let t of [vertCoordTable, edgeTable, edgeToVertsTable, triTable, neighbourCellsTable]) { 
+        new Int32Array(range, currOff*4, t.length).set(t);
         currOff += t.length;
     };
 
     tableBuffer.unmap();
 
     marchData.buffers.tables = tableBuffer;
-    // global
 
-    // global
+    
     var marchVarsBuffer = device.createBuffer({
         size: Float32Array.BYTES_PER_ELEMENT + 3*Uint32Array.BYTES_PER_ELEMENT,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
@@ -1507,7 +726,7 @@ function createGlobalBuffers() {
 
     
     const offsetTotalsBufferLength = 2 + WGPrefixSumCount*2;
-    // global
+    
     var vertexOffsetTotalsBuffer = device.createBuffer({
         size: offsetTotalsBufferLength * Uint32Array.BYTES_PER_ELEMENT,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
@@ -1526,10 +745,29 @@ function createGlobalBuffers() {
     marchData.buffers.vertexOffsetTotals = vertexOffsetTotalsBuffer;
     marchData.buffers.indexOffsetTotals = indexOffsetTotalsBuffer;
     marchData.buffers.bufferOffset = bufferOffsetBuffer;
-    // global
+    
+    var readBuffer = device.createBuffer({
+        size: 64 * Uint32Array.BYTES_PER_ELEMENT,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+    });
+
+    marchData.buffers.read = readBuffer;
+
 }
 
 function createGlobalBindGroups() {
+    marchData.bindGroups.tables = device.createBindGroup({
+        layout: marchData.bindGroupLayouts.enumerateFine[0],
+        entries: [
+            {
+                binding: 0,
+                resource: {
+                    buffer: marchData.buffers.tables
+                }
+            }
+        ]
+    });
+
     marchData.bindGroups.marchVars = device.createBindGroup({
         layout: marchData.bindGroupLayouts.enumerate[1],
         entries: [
@@ -1542,7 +780,6 @@ function createGlobalBindGroups() {
         ]
     });
 
-    // global
     marchData.bindGroups.bufferOffset = device.createBindGroup({
         layout: marchData.bindGroupLayouts.prefix[1],
         entries: [
@@ -1654,6 +891,32 @@ function createBindGroupLayouts() {
                 }
             }
         ]
+    });
+
+    var bindGroupLayoutH = device.createBindGroupLayout({
+        entries: [
+            {
+                binding: 0,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "read-only-storage",
+                }
+            },
+            {
+                binding: 1,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "read-only-storage",
+                }
+            },
+            {
+                binding: 2,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "read-only-storage",
+                }
+            }
+        ]
     })
 
     marchData.bindGroupLayouts.enumerate = [
@@ -1661,6 +924,12 @@ function createBindGroupLayouts() {
         bindGroupLayoutB,
         bindGroupLayoutC,
         bindGroupLayoutC
+    ];
+
+    marchData.bindGroupLayouts.enumerateFine = [
+        bindGroupLayoutE,
+        bindGroupLayoutH,
+        bindGroupLayoutG
     ];
 
     marchData.bindGroupLayouts.prefix = [
@@ -1674,7 +943,16 @@ function createBindGroupLayouts() {
         bindGroupLayoutF,
         bindGroupLayoutG
     ];
+
+    marchData.bindGroupLayouts.marchFine = [
+        bindGroupLayoutE,
+        bindGroupLayoutH,
+        bindGroupLayoutD,
+        bindGroupLayoutG
+    ];
+
 }
+
 
 function getWGCount(dataObj) {
     const cellScale = dataObj.marchData.cellScale;
@@ -1708,15 +986,31 @@ async function setupMarch(dataObj) {
 
     getWGCount(dataObj);
 
+    enumerateCode = await enumerateCode;
+    
+    marchCode = await marchCode;
+
     // create the enumaeration and marching cubes pipelines
-    marchData.pipelines.prefix = createPrefixSumPipelines();
     
     dataObj.marchData.pipelines = {
         enumerate: createEnumeratePipeline(dataObj),
         march: createMarchPipeline(dataObj)
     }
     
-    createBindGroups(dataObj);    
+    createBindGroups(dataObj);   
+    
+    if (dataObj.complex) {
+        console.log("setting up compex dataset")
+        enumerateFineCode = await enumerateFineCode;
+        marchFineCode = await marchFineCode;
+
+        // create the pipelines
+        dataObj.marchData.pipelines = {
+            ...dataObj.marchData.pipelines,
+            enumerateFine: createEnumerateFinePipeline(dataObj),
+            marchFine: createMarchFinePipeline(dataObj)
+        }
+    }
 
     
 }
@@ -1729,27 +1023,36 @@ function createBindGroups(dataObj) {
     const WGCount = dataObj.marchData.WGCount;
     {
         var dataBuffer = device.createBuffer({
-            size: 32 + Math.ceil((dataObj.volume * 4/packing)/4)*4,
+            size: 48 + Math.ceil((dataObj.volume * 4/packing)/4)*4,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
             mappedAtCreation: true
         }); 
 
-        var range = dataBuffer.getMappedRange()
+        var range = dataBuffer.getMappedRange();
 
+        // keep a track of where to write into data buffer
+        var nextPtr = 0;
 
-        new Uint32Array(range, 0, 3).set(dataObj.size);
+        new Uint32Array(range, nextPtr, 3).set(dataObj.size);
+        nextPtr += 16
 
-        new Uint32Array(range, 16, 3).set([WGCount.x, WGCount.y, WGCount.z]);
+        new Uint32Array(range, nextPtr, 3).set([WGCount.x, WGCount.y, WGCount.z]);
+        nextPtr += 16;
+
+        new Float32Array(range, nextPtr, 3).set(dataObj.cellSize);
+        nextPtr += 16;
+
+        var data = dataObj.data;
 
         if (packing == 1) {
-            new Float32Array(range, 32, dataObj.volume).set(dataObj.data);
+            new Float32Array(range, nextPtr, dataObj.volume).set(data);
         } else if(packing == 4) {
-            if (dataObj.data.constructor == Float32Array) {
-                new Uint8Array(range, 32, dataObj.volume).set(Uint8Array.from(dataObj.data, (val) => {
+            if (data.constructor == Float32Array) {
+                new Uint8Array(range, nextPtr, dataObj.volume).set(Uint8Array.from(data, (val) => {
                     return 255*(val-dataObj.limits[0])/(dataObj.limits[1]-dataObj.limits[0])
                 }));
-            } else if (dataObj.data.constructor == Uint8Array) {
-                new Uint8Array(range, 32, dataObj.volume).set(dataObj.data);
+            } else if (data.constructor == Uint8Array) {
+                new Uint8Array(range, nextPtr, dataObj.volume).set(data);
             }
         }        
 
@@ -1827,7 +1130,11 @@ function createOffsetBindGroupLayout() {
 
 function createEnumeratePipeline(dataObj) {
     const enumerateCodeFormatted = stringFormat(enumerateCode, {
-        "packing": dataObj.marchData.packing
+        "packing": dataObj.marchData.packing,
+        "WGSizeX": WGSize.x,
+        "WGSizeY": WGSize.y,
+        "WGSizeZ": WGSize.z,
+        "WGVol": WGSize.x * WGSize.y * WGSize.z
     })
     var enumerateModule = device.createShaderModule({
         code: enumerateCodeFormatted
@@ -1846,12 +1153,43 @@ function createEnumeratePipeline(dataObj) {
     });
 }
 
-function createPrefixSumPipelines() {
-    const moduleA = device.createShaderModule({
-        code: prefixSumA
+function createEnumerateFinePipeline(dataObj) {
+    const codeFormatted = stringFormat(enumerateFineCode, {
+        "packing": dataObj.marchData.packing,
+        "WGSizeX": WGSize.x,
+        "WGSizeY": WGSize.y,
+        "WGSizeZ": WGSize.z,
+        "WGVol": WGSize.x * WGSize.y * WGSize.z
+    })
+    var module = device.createShaderModule({
+        code: codeFormatted
     });
+
+    var pipelineLayout = device.createPipelineLayout({
+        bindGroupLayouts: marchData.bindGroupLayouts.enumerateFine
+    });
+
+    return device.createComputePipeline({
+        layout: pipelineLayout,
+        compute: {
+            module: module,
+            entryPoint: "main"
+        }
+    });
+}
+
+function createPrefixSumPipelines() {
+    const prefixSumACodeFormatted = stringFormat(prefixSumACode, {
+        "WGPrefixSumCount": WGPrefixSumCount
+    })
+    const moduleA = device.createShaderModule({
+        code: prefixSumACodeFormatted
+    });
+    const prefixSumBCodeFormatted = stringFormat(prefixSumBCode, {
+        "WGPrefixSumCount": WGPrefixSumCount
+    })
     const moduleB = device.createShaderModule({
-        code: prefixSumB
+        code: prefixSumBCodeFormatted
     });
 
     var pipelineLayout = device.createPipelineLayout({bindGroupLayouts: marchData.bindGroupLayouts.prefix});         
@@ -1875,19 +1213,50 @@ function createPrefixSumPipelines() {
 }
 
 function createMarchPipeline(dataObj) {
-    const marchCodeFormatted = stringFormat(marchCodeNew, {
-        "packing": dataObj.marchData.packing
+    const marchCodeFormatted = stringFormat(marchCode, {
+        "packing": dataObj.marchData.packing,
+        "WGSizeX": WGSize.x,
+        "WGSizeY": WGSize.y,
+        "WGSizeZ": WGSize.z,
+        "WGVol": WGSize.x * WGSize.y * WGSize.z
     })
     const shaderModule = device.createShaderModule({
         code: marchCodeFormatted
     });
 
-    var pipelineLayout = device.createPipelineLayout({bindGroupLayouts: marchData.bindGroupLayouts.march});
+    var pipelineLayout = device.createPipelineLayout({
+        bindGroupLayouts: marchData.bindGroupLayouts.march
+    });
 
     return device.createComputePipeline({
         layout: pipelineLayout,
         compute: {
             module: shaderModule,
+            entryPoint: "main"
+        }
+    });
+}
+
+function createMarchFinePipeline(dataObj) {
+    const codeFormatted = stringFormat(marchFineCode, {
+        "packing": dataObj.marchData.packing,
+        "WGSizeX": WGSize.x,
+        "WGSizeY": WGSize.y,
+        "WGSizeZ": WGSize.z,
+        "WGVol": WGSize.x * WGSize.y * WGSize.z
+    })
+    var module = device.createShaderModule({
+        code: codeFormatted
+    });
+
+    var pipelineLayout = device.createPipelineLayout({
+        bindGroupLayouts: marchData.bindGroupLayouts.marchFine
+    });
+
+    return device.createComputePipeline({
+        layout: pipelineLayout,
+        compute: {
+            module: module,
             entryPoint: "main"
         }
     });
@@ -1924,6 +1293,39 @@ function createMarchOutputBindGroup(vertNum, indexNum, dataObj) {
             },
             {
                 binding: 2,
+                resource: {
+                    buffer: marchIndexBuffer
+                }
+            },
+        ]
+    })
+}
+
+function createMarchFineOutputBindGroup(vertNum, indexNum, dataObj) {
+    marchVertBuffer = device.createBuffer({
+        size: 3 * vertNum * Float32Array.BYTES_PER_ELEMENT,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.VERTEX
+    }); 
+    marchNormalBuffer = device.createBuffer({
+        size: 3 * vertNum * Float32Array.BYTES_PER_ELEMENT,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.VERTEX
+    });
+    marchIndexBuffer = device.createBuffer({
+        size: indexNum * Uint32Array.BYTES_PER_ELEMENT,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.INDEX
+    });
+    
+    return device.createBindGroup({
+        layout: dataObj.marchData.pipelines.marchFine.getBindGroupLayout(2),
+        entries: [
+            {
+                binding: 0,
+                resource: {
+                    buffer: marchVertBuffer
+                }
+            },
+            {
+                binding: 1,
                 resource: {
                     buffer: marchIndexBuffer
                 }
@@ -2213,7 +1615,10 @@ async function march(dataObj, meshObj, threshold) {
             break;
         }
     }
+    //console.log(currScale)
     //console.log(currScale);
+
+    //console.log("coarse vert + ind:", vertNum, indNum);
     // marching pass =====================================================================
 
     meshObj.indicesNum = indNum;
@@ -2226,10 +1631,12 @@ async function march(dataObj, meshObj, threshold) {
         console.log("yo, no verts")
         return;
     }
-    var marchOutBindGroup = createMarchOutputBindGroup(vertNum, indNum, dataObj);
+
+    deleteBuffers(meshObj);
+
+    var marchOutBindGroup = createMarchOutputBindGroup(vertNum, indNum, dataObj, false);
     
     // set the buffers in the mesh
-    deleteBuffers(meshObj);
     meshObj.buffers = {
         vertex: marchVertBuffer,
         normal: marchNormalBuffer,
@@ -2322,6 +1729,360 @@ async function march(dataObj, meshObj, threshold) {
     //console.log("took: " + Math.round(performance.now()-t0) + "ms");
 }
 
+// run when the fine data is changed before marching through it
+// deals with loading the data onto the gpu, creating buffers and bindgroups
+// and cleaning up the previous buffers if they exist
+function setupmarchFine(dataObj) {
+    // destroy buffers if they already exist
+    dataObj.marchData.buffers.activeBlocks?.destroy();
+    dataObj.marchData.buffers.dataFine?.destroy();
+    dataObj.marchData.buffers.blockLocations?.destroy();
+    dataObj.marchData.buffers.vertexOffsetFine?.destroy();
+    dataObj.marchData.buffers.indexOffsetFine?.destroy();
+
+    const packing = dataObj.marchData.packing;
+    const WGCount = dataObj.marchData.WGCount;
+    // create data buffer
+    {
+        var dataBuffer = device.createBuffer({
+            size: 32 + Math.ceil((dataObj.fineData.length * 4/packing)/4)*4,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+            mappedAtCreation: true
+        }); 
+
+        var range = dataBuffer.getMappedRange();
+
+        var nextPtr = 0;
+        nextPtr += 16;
+
+        console.log(dataObj.blocksSize)
+        new Uint32Array(range, nextPtr, 3).set(dataObj.blocksSize);
+        nextPtr += 16;
+
+        const data = dataObj.fineData;
+
+        if (packing == 1) {
+            new Float32Array(range, nextPtr, data.length).set(data);
+        } else if(packing == 4) {
+            if (data.constructor == Float32Array) {
+                new Uint8Array(range, nextPtr, data.length).set(Uint8Array.from(data, (val) => {
+                    return 255*(val-dataObj.limits[0])/(dataObj.limits[1]-dataObj.limits[0])
+                }));
+            } else if (data.constructor == Uint8Array) {
+                console.log("uint8")
+                new Uint8Array(range, nextPtr, data.length).set(data);
+            }
+        }
+
+        dataBuffer.unmap();
+
+        var activeBlocksBuffer = device.createBuffer({
+            size: 4*Math.ceil(dataObj.activeBlocks.length/4)*4,
+            usage: GPUBufferUsage.STORAGE,
+            mappedAtCreation: true
+        }); 
+
+        new Uint32Array(activeBlocksBuffer.getMappedRange(), 0, dataObj.activeBlocks.length).set(dataObj.activeBlocks);
+        activeBlocksBuffer.unmap();
+
+        // create and set the locations buffer too
+        var blockLocationsBuffer = device.createBuffer({
+            size: 4*Math.ceil(dataObj.blockLocations.length/4)*4,
+            usage: GPUBufferUsage.STORAGE,
+            mappedAtCreation: true
+        }); 
+
+        new Int32Array(blockLocationsBuffer.getMappedRange(), 0, dataObj.blockLocations.length).set(dataObj.blockLocations);
+        blockLocationsBuffer.unmap();
+
+        dataObj.marchData.buffers.dataFine = dataBuffer;
+        dataObj.marchData.buffers.activeBlocks = activeBlocksBuffer;
+        dataObj.marchData.buffers.blockLocations = blockLocationsBuffer;
+
+
+        dataObj.marchData.bindGroups.dataFine = device.createBindGroup({
+            layout: dataObj.marchData.pipelines.enumerateFine.getBindGroupLayout(1),
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: dataBuffer
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: activeBlocksBuffer
+                    }
+                },
+                {
+                    binding: 2,
+                    resource: {
+                        buffer: blockLocationsBuffer
+                    }
+                }
+            ]
+        });
+    };
+
+    // create offset buffers
+    {
+        const offsetBufferLength = Math.ceil(dataObj.activeBlocks.length/(WGPrefixSumCount*2)) * WGPrefixSumCount*2;
+        
+        var vertexOffsetBuffer = device.createBuffer({
+            size: offsetBufferLength * Uint32Array.BYTES_PER_ELEMENT,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+        });
+        
+        var indexOffsetBuffer = device.createBuffer({
+            size: offsetBufferLength * Uint32Array.BYTES_PER_ELEMENT,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+        });
+    
+        dataObj.marchData.buffers.vertexOffsetFine = vertexOffsetBuffer;
+        dataObj.marchData.buffers.indexOffsetFine = indexOffsetBuffer;        
+    
+        dataObj.marchData.bindGroups.vertexOffsetFine = device.createBindGroup({
+            layout: marchData.pipelines.prefix[0].getBindGroupLayout(0),
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: vertexOffsetBuffer
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: marchData.buffers.vertexOffsetTotals
+                    }
+                }
+            ]
+        });
+    
+        dataObj.marchData.bindGroups.indexOffsetFine = device.createBindGroup({
+            layout: marchData.pipelines.prefix[0].getBindGroupLayout(0),
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: indexOffsetBuffer
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: marchData.buffers.indexOffsetTotals
+                    }
+                }
+            ]
+        });
+    
+        // combined offset buffers into one bg
+        dataObj.marchData.bindGroups.combinedOffsetFine = device.createBindGroup({
+            layout: dataObj.marchData.pipelines.enumerateFine.getBindGroupLayout(2),
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: vertexOffsetBuffer
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: indexOffsetBuffer
+                    }
+                }
+            ]
+        }); 
+    }
+
+}
+
+async function marchFine(dataObj, meshObj, threshold) {
+    if (dataObj.fineData.length == 0) return;
+    console.log(dataObj.activeBlocks.length)   
+
+    // setup for loading the data onto the gpu =====================================
+    // also creates BGs
+    setupmarchFine(dataObj);
+    // =============================================================================
+
+    // write threshold 
+    device.queue.writeBuffer(dataObj.marchData.buffers.dataFine, 0, new Float32Array([transformThreshold(threshold, dataObj)]));
+
+    const maxWG = device.limits.maxComputeWorkgroupsPerDimension;
+    var totalBlocks = dataObj.activeBlocks.length;
+    var thisNumBlocks;
+    var blockOffset = 0;
+
+    for (let i = 0; i < Math.ceil(totalBlocks/maxWG); i++) {
+        var commandEncoder = await device.createCommandEncoder();
+        device.queue.writeBuffer(dataObj.marchData.buffers.dataFine, 4, new Uint32Array([blockOffset]));
+        thisNumBlocks =  Math.min(maxWG, totalBlocks-blockOffset);
+
+        var passEncoder = commandEncoder.beginComputePass();
+    
+        passEncoder.setPipeline(dataObj.marchData.pipelines.enumerateFine);
+        passEncoder.setBindGroup(0, marchData.bindGroups.tables);
+        passEncoder.setBindGroup(1, dataObj.marchData.bindGroups.dataFine);
+        passEncoder.setBindGroup(2, dataObj.marchData.bindGroups.combinedOffsetFine);
+        passEncoder.dispatch(thisNumBlocks);
+        passEncoder.endPass();
+
+        device.queue.submit([commandEncoder.finish()])  
+
+        blockOffset += thisNumBlocks;
+    }
+
+    // prefix sum pass ===================================================================
+    const offsetTotalsBufferLength = 2 + WGPrefixSumCount*2;
+    device.queue.writeBuffer(marchData.buffers.vertexOffsetTotals, 0, new Uint32Array(offsetTotalsBufferLength));
+    device.queue.writeBuffer(marchData.buffers.indexOffsetTotals, 0, new Uint32Array(offsetTotalsBufferLength));
+    
+    // prefix sum on verts
+    // starts as total number of values in totals
+    const numBlocks = Math.ceil(dataObj.activeBlocks.length/(WGPrefixSumCount*2));
+    var thisNumBlocks
+    var OffsetIntoOffsetBuffer = 0;
+    
+    const elems = 32;
+    const totalsClearArray = new Uint32Array(WGPrefixSumCount*2);
+
+    //                  number of rounds to do
+    for (let i = 0; i < numBlocks/(WGPrefixSumCount*2); i++) {
+        //console.log("round " + i)
+        device.queue.writeBuffer(marchData.buffers.bufferOffset, 0, Uint32Array.from([OffsetIntoOffsetBuffer]));
+        if (i > 0) {
+            device.queue.writeBuffer(marchData.buffers.vertexOffsetTotals, 2*4, totalsClearArray);
+            device.queue.writeBuffer(marchData.buffers.indexOffsetTotals, 2*4, totalsClearArray);
+        }
+        
+        thisNumBlocks = Math.max(2, Math.min(WGPrefixSumCount*2, numBlocks-OffsetIntoOffsetBuffer));
+        
+        //console.log(thisNumBlocks);
+        
+        //console.log("numblock: " + numBlocks)
+        commandEncoder = await device.createCommandEncoder();
+        
+        
+        
+        // prefix sum on verts
+        var passEncoder2 = commandEncoder.beginComputePass();
+        passEncoder2.setPipeline(marchData.pipelines.prefix[0]);
+        passEncoder2.setBindGroup(0, dataObj.marchData.bindGroups.vertexOffsetFine);
+        passEncoder2.setBindGroup(1, marchData.bindGroups.bufferOffset);
+        passEncoder2.dispatch(thisNumBlocks);
+        passEncoder2.endPass();
+
+        // prefix sum on indices
+        var passEncoder3 = commandEncoder.beginComputePass();
+        passEncoder3.setPipeline(marchData.pipelines.prefix[0]);
+        passEncoder3.setBindGroup(0, dataObj.marchData.bindGroups.indexOffsetFine);
+        passEncoder3.setBindGroup(1, marchData.bindGroups.bufferOffset);
+
+        passEncoder3.dispatch(thisNumBlocks);
+        passEncoder3.endPass();
+        
+        if (numBlocks > 0) {
+            var passEncoder4 = commandEncoder.beginComputePass();
+            passEncoder4.setPipeline(marchData.pipelines.prefix[1]);
+            passEncoder4.setBindGroup(0, dataObj.marchData.bindGroups.vertexOffsetFine);
+            passEncoder4.setBindGroup(1, marchData.bindGroups.bufferOffset);
+
+            passEncoder4.dispatch(1);
+            passEncoder4.endPass();
+            // for indices
+            var passEncoder5 = commandEncoder.beginComputePass();
+            passEncoder5.setPipeline(marchData.pipelines.prefix[1]);
+            passEncoder5.setBindGroup(0, dataObj.marchData.bindGroups.indexOffsetFine);
+            passEncoder5.setBindGroup(1, marchData.bindGroups.bufferOffset);
+
+            passEncoder5.dispatch(1);
+            passEncoder5.endPass();
+        }
+
+        await device.queue.onSubmittedWorkDone();
+        device.queue.submit([commandEncoder.finish()]);
+
+        OffsetIntoOffsetBuffer += thisNumBlocks;
+    }
+    // copy values into correct buffers
+    commandEncoder = await device.createCommandEncoder();
+
+    commandEncoder.copyBufferToBuffer(marchData.buffers.vertexOffsetTotals, 4, marchData.buffers.countReadBuffer, 0, 4);
+    commandEncoder.copyBufferToBuffer(marchData.buffers.indexOffsetTotals, 4, marchData.buffers.countReadBuffer, 4, 4);
+
+    device.queue.submit([commandEncoder.finish()]);
+    
+    //device.queue.submit(prefixSumCommands);
+    
+    await marchData.buffers.countReadBuffer.mapAsync(GPUMapMode.READ, 0, 8) 
+    const lengths = new Uint32Array(marchData.buffers.countReadBuffer.getMappedRange());
+    var vertNum = lengths[0];
+    var indNum = lengths[1];
+    //console.log("fine verts + inds:", vertNum, indNum);  
+    marchData.buffers.countReadBuffer.unmap();
+
+
+    // march pass =====================================================================================
+    meshObj.indicesNum = indNum;
+    meshObj.vertNum = vertNum;
+
+    if (vertNum == 0 || indNum == 0) {
+        meshObj.verts = new Float32Array();
+        meshObj.normals = new Float32Array();
+        meshObj.indices = new Float32Array();
+        console.log("yo, no verts")
+        return;
+    }
+    deleteBuffers(meshObj);
+    var marchOutBindGroup = createMarchFineOutputBindGroup(vertNum, indNum, dataObj);
+    
+    // set the buffers in the mesh
+    meshObj.buffers = {
+        vertex: marchVertBuffer,
+        // normals will be all 0 vectors
+        normal: marchNormalBuffer,
+        index: marchIndexBuffer
+    }
+
+    totalBlocks = dataObj.activeBlocks.length;
+    blockOffset = 0;
+
+    for (let i = 0; i < Math.ceil(totalBlocks/maxWG); i++) {
+        var commandEncoder = await device.createCommandEncoder();
+        device.queue.writeBuffer(dataObj.marchData.buffers.dataFine, 4, new Uint32Array([blockOffset]));
+        thisNumBlocks =  Math.min(maxWG, totalBlocks-blockOffset);
+
+        var commandEncoder = await device.createCommandEncoder();
+
+        var passEncoder6 = commandEncoder.beginComputePass();
+        
+        passEncoder6.setPipeline(dataObj.marchData.pipelines.marchFine);
+        passEncoder6.setBindGroup(0, marchData.bindGroups.tables);
+        passEncoder6.setBindGroup(1, dataObj.marchData.bindGroups.dataFine);
+        passEncoder6.setBindGroup(2, marchOutBindGroup);
+        passEncoder6.setBindGroup(3, dataObj.marchData.bindGroups.combinedOffsetFine);
+        passEncoder6.dispatch(thisNumBlocks);
+        passEncoder6.endPass();
+
+        commandEncoder.copyBufferToBuffer(marchVertBuffer, 0, marchData.buffers.read, 0, 10*4);
+
+        device.queue.submit([commandEncoder.finish()]);
+        blockOffset += thisNumBlocks;
+    }
+
+
+    // marchData.buffers.read.mapAsync(GPUMapMode.READ, 0, 10*4).then(() => {
+    //     console.log(new Float32Array(marchData.buffers.read.getMappedRange(0, 10*4)));
+    //     marchData.buffers.read.unmap();
+    // });
+
+
+}
+
 // document.body.onkeydown = () => {
 //     readBuffer.mapAsync(GPUMapMode.READ, 0, 7776*4).then(() => {
 //         var offsets = new Uint32Array(readBuffer.getMappedRange(0, 7776*4)); 
@@ -2334,7 +2095,7 @@ async function march(dataObj, meshObj, threshold) {
 //     });
 // }
 
-// rendering functions =================================================================================
+// rendering functions ==========================================================================================
 
 async function setupRenderer(canvas) {
     if (!device) {
@@ -2351,6 +2112,7 @@ async function setupRenderer(canvas) {
 
     // TODO: seperate pipeline for rendering views and copying to main texture
 
+    shaderCode = await shaderCode;
     renderPipeline = createRenderPipeline();
 
     uniformBuffer = device.createBuffer({
@@ -2504,6 +2266,7 @@ function clearScreen() {};
 
 async function renderView(ctx, projMat, modelViewMat, box, meshObj) {
     if (meshObj.indicesNum == 0) return;
+    
 
     var commandEncoder = device.createCommandEncoder();
     // provide details of load and store part of pass
@@ -2541,17 +2304,26 @@ async function renderView(ctx, projMat, modelViewMat, box, meshObj) {
     await commandEncoder;
     
     const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-    passEncoder.setViewport(box.left, box.top, box.width, box.height, 0, 1);
-    passEncoder.setScissorRect(box.left, box.top, box.width, box.height);
-    passEncoder.setPipeline(renderPipeline);
-    passEncoder.setIndexBuffer(meshObj.buffers.index, "uint32");
-    passEncoder.setVertexBuffer(0, meshObj.buffers.vertex);
-    passEncoder.setVertexBuffer(1, meshObj.buffers.normal);
-    // passEncoder.setIndexBuffer(buffers[id].index.buffer, "uint32");
-    // passEncoder.setVertexBuffer(0, buffers[id].vertex.buffer);
-    // passEncoder.setVertexBuffer(1, buffers[id].normal.buffer);
-    passEncoder.setBindGroup(0, bindGroup);
-    passEncoder.drawIndexed(meshObj.indicesNum);
+
+    // for now, only draw a view if it is fully inside the canvas
+    if (box.right >= 0 && box.bottom >= 0 && box.left >= 0 && box.top >= 0) {
+        // will support rect outside the attachment size for V1 of webgpu
+        // https://github.com/gpuweb/gpuweb/issues/373 
+        passEncoder.setViewport(box.left, box.top, box.width, box.height, 0, 1);
+        // clamp to be inside the canvas
+        clampBox(box, ctx.canvas.getBoundingClientRect());
+        passEncoder.setScissorRect(box.left, box.top, box.width, box.height);
+        passEncoder.setPipeline(renderPipeline);
+        passEncoder.setIndexBuffer(meshObj.buffers.index, "uint32");
+        passEncoder.setVertexBuffer(0, meshObj.buffers.vertex);
+        passEncoder.setVertexBuffer(1, meshObj.buffers.normal);
+        // passEncoder.setIndexBuffer(buffers[id].index.buffer, "uint32");
+        // passEncoder.setVertexBuffer(0, buffers[id].vertex.buffer);
+        // passEncoder.setVertexBuffer(1, buffers[id].normal.buffer);
+        passEncoder.setBindGroup(0, bindGroup);
+        passEncoder.drawIndexed(meshObj.indicesNum);
+    }
+    
     passEncoder.endPass();
 
     device.queue.submit([commandEncoder.finish()]);
@@ -2590,3 +2362,45 @@ async function renderFrame() {
     // device.
     // copy each 
 }
+
+function resizeRenderingContext(ctx) {
+    ctx.configure({
+        device: device,
+        format: 'bgra8unorm'
+    });
+}
+
+
+
+function posFromIndex(i, size) {
+    return {
+        x: Math.floor(i/(size.y*size.z)), 
+        y: Math.floor(i/size.z)%size.y, 
+        z: i%size.z
+    };
+}
+
+function getIndex(pos, size) {
+    return pos.x*size.y*size.z + pos.y*size.z + pos.z;
+}
+
+const size = {
+    x: 8,
+    y: 9,
+    z: 13
+}
+
+for (let i = 0; i < 100; i++) {
+    const pos = {
+        x: Math.floor(Math.random()*size.x),
+        y: Math.floor(Math.random()*size.y),
+        z: Math.floor(Math.random()*size.z)
+    }
+    const index = getIndex(pos, size);
+    const pos2 = posFromIndex(index, size);
+    if (pos.x != pos2.x || pos.y != pos2.y || pos.z != pos2.z) {
+        console.log(pos, pos2, index)
+        console.log("incorrect mapping")
+    }
+}
+

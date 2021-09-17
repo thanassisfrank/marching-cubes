@@ -11,7 +11,7 @@ import {createBuffers, updateMeshBuffers, deleteBuffers, clearScreen, renderView
 // import { generateMeshWasm } from "./marchingWasm.js";
 // import {march} from "./webGPU.js";
 
-import { march } from "./march.js";
+import { march, marchFine } from "./march.js";
 
 export {viewManager};
 
@@ -45,6 +45,7 @@ var viewManager = {
 
         camera.setModelMat(modelMat);
         camera.setProjMat();
+        camera.setDist(1.5*data.maxSize*data.maxCellSize);
 
         // generate id
         const id = newId(this.views);
@@ -61,11 +62,12 @@ var viewManager = {
         viewContainer.classList.add("view-container");
         viewContainer.id = id;
         var frame = create("DIV");
+        frame.tabindex = 0;
         frame.classList.add("view-frame");
         var slider = create("INPUT");
         slider.type = "range";
-        slider.min = Math.max(view.data.limits[0] - 5, 0);
-        slider.max = view.data.limits[1] + 5;
+        slider.min = Math.max(view.data.limits[0] - 10, 0);
+        slider.max = view.data.limits[1] + 10;
         slider.value = (view.data.limits[0] + view.data.limits[1])/2;
         slider.step = (view.data.limits[0] - view.data.limits[1]) * 100;
         var closeBtn = create("BUTTON");
@@ -82,12 +84,44 @@ var viewManager = {
 
         // set event listeners for the elements
         frame.onmousedown = function(e) {
-            view.camera.startMove(e.clientX, e.clientY);
+            if (frame.requestPointerLock) {
+                frame.requestPointerLock();
+            }
+            if (e.ctrlKey) {
+                // pan
+                view.camera.startMove(e.movementX, e.movementY, 0, "pan");
+            } else if (e.altKey) {
+                // dolly forward/back
+                view.camera.startMove(0, 0, e.movementY, "dolly");
+            } else {
+                // rotate
+                view.camera.startMove(e.movementX, e.movementY, 0, "orbit");
+            }
+            
         };
         frame.onmousemove = function(e) {
-            view.camera.move(e.clientX, e.clientY)
+            const shiftFac = 3;
+            var x = e.movementX;
+            var y = e.movementY;
+            if (e.shiftKey) {
+                x *= shiftFac;
+                y *= shiftFac;
+            }
+            if (e.ctrlKey) {
+                // pan
+                view.camera.move(x, y, 0, "pan");
+            } else if (e.altKey) {
+                // dolly forward/back
+                view.camera.move(0, 0, y, "dolly");
+            } else {
+                // rotate
+                view.camera.move(x, y, 0, "orbit");
+            }
         };
         frame.onmouseup = function(e) {
+            if (document.exitPointerLock) {
+                document.exitPointerLock();
+            }
             view.camera.endMove();
         };
         frame.onmouseleave = function(e) {
@@ -100,6 +134,7 @@ var viewManager = {
         slider.oninput = function() {
             view.updateThreshold(parseFloat(this.value));
         };
+
 
         // might want another event listener for when the frame element is moved or resized 
         // to update view.box
@@ -131,12 +166,22 @@ var viewManager = {
         this.mesh = mesh;
         this.threshold = (this.data.limits[0] + this.data.limits[1])/2;
         this.updating = false;
+        // holds a timer that waits for a little while after the threshold has stopped changing
+        // then generates a fine mesh
+        this.fineTimer = {
+            // timer itself
+            timer: undefined,
+            // time to fire in ms
+            duration: 1000
+        }
         this.box = {};
         this.init = function() {
             //this.bufferId = createBuffers();
             this.updateThreshold(this.threshold);
         }
         this.updateThreshold = async function(val) {
+            // stops the fine timer running if it is
+            clearTimeout(this.fineTimer.timer)
             if (this.data.initialised){
                 if(!this.updating) {
                     this.updating = true;
@@ -153,6 +198,15 @@ var viewManager = {
         }
         this.generateMesh = async function() {
             await march(this.data, this.mesh, this.threshold);
+
+            if (this.data.complex) {
+                var that = this;
+                this.fineTimer.timer = setTimeout(async function() {
+                    console.log("march fine")
+                    await that.data.getFineDataBlocks(that.threshold);
+                    await marchFine(that.data, that.mesh, that.threshold);
+                }, this.fineTimer.duration);
+            };
         }
         this.updateBuffers = function() {
             updateMeshBuffers(this.mesh);
@@ -165,10 +219,12 @@ var viewManager = {
         }
         this.getBox = function() {
             // find the box corresponding to the associated frame element
+            // the box is relative to the canvas element
             var rect = this.getFrameElem().getBoundingClientRect();
             var canvasRect = get("c").getBoundingClientRect();
             this.box.left = rect.left - canvasRect.left// + window.scrollX;
             this.box.top = rect.top - canvasRect.top;
+            this.box.right = window.innerWidth + canvasRect.left - rect.right;
             this.box.bottom = window.innerHeight + canvasRect.top - rect.bottom// - window.scrollY;
             this.box.width = rect.width;
             this.box.height = rect.width;

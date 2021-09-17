@@ -1,0 +1,82 @@
+{
+    "engine": {
+        "name": "engine",
+        "path": "engine_256x256x128_uint8.raw",
+        "size": {
+            "x": 128,
+            "y": 256,
+            "z": 256
+        },
+        "cellSize": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+        },
+        "limits": [0, 255],
+        "dataType": "uint8"
+    },
+    "magnetic": {
+        "name": "magnetic",
+        "path": "magnetic_reconnection_512x512x512_float32.raw",
+        "size": {
+            "x": 512,
+            "y": 512,
+            "z": 512
+        },
+        "cellSize": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+        },
+        "limits": [0, 1000000],
+        "dataType": "float32"
+    },
+    "silicium": {
+        "name": "silicium",
+        "path": "silicium_98x34x34_uint8.raw",
+        "size": {
+            "x": 34,
+            "y": 34,
+            "z": 98
+        },
+        "cellSize": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+        },
+        "limits": [0, 255],
+        "dataType": "uint8"
+    },
+    "simple": {
+        "name": "simple",
+        "path": "simple.raw",
+        "size": {
+            "x": 16,
+            "y": 16,
+            "z": 16
+        },
+        "cellSize": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+        },
+        "limits": [0, 16],
+        "dataType": "float32"
+    },
+    "sphere": {
+        "name": "sphere",
+        "path": "sphere.raw",
+        "size": {
+            "x": 16,
+            "y": 16,
+            "z": 16
+        },
+        "cellSize": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+        },
+        "limits": [0, 64],
+        "dataType": "uint8"
+    }
+}

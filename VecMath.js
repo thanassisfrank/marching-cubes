@@ -7,7 +7,10 @@ const VecMath = {
 	
 	// All of these functions expect vectors of three dimensions and
 	// three by three matricies
-	
+	// [[0, 1, 2],     [0,
+	//  [3, 4, 5], and  1,
+	//  [6, 7, 8]]      2]
+
 	vecAdd: function(vec, vec1) {
 		var newX = vec[0] + vec1[0];
 		var newY = vec[1] + vec1[1];

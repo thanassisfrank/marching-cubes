@@ -1,6 +1,6 @@
 // utils.js
 
-export {get, getCtx, create, setupCanvasDims, getFirstOfClass, repositionCanvas, sin30, cos30, toRads, unZipVerts, newId, stringFormat};
+export {get, getCtx, create, setupCanvasDims, getFirstOfClass, repositionCanvas, sin30, cos30, toRads, unZipVerts, newId, stringFormat, dataTypes, clampBox};
 
 var get = (id) => {
     return document.getElementById(id)
@@ -81,8 +81,21 @@ var newId = (obj) => {
 // replaces every {{key}} in s with replace[key]
 function stringFormat(s, replace) {
     for (const key in replace) {
-        console.log(key)
-        s = s.replaceAll("{{"+key+"}}", replace[key])
+        s = s.replaceAll("{{"+key+"}}", replace[key])   
     }
     return s;
+}
+
+const dataTypes = {
+    "uint8": Uint8Array,
+    "float32": Float32Array
+}
+
+var clampBox = (box, clampBox) => {
+    box.left = Math.max(0, Math.min(clampBox.width, box.left));
+    box.top = Math.max(0, Math.min(clampBox.height, box.top));
+    box.right = Math.max(0, Math.min(clampBox.width, box.right));
+    box.bottom = Math.max(0, Math.min(clampBox.height, box.bottom));
+    box.width = clampBox.width - box.left - box.right;
+    box.height = clampBox.height - box.top - box.bottom;
 }
