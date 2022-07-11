@@ -1,42 +1,42 @@
-[[block]] struct Data {
-    [[size(16)]] size :  vec3<u32>;
-    [[size(16)]] WGNum :  vec3<u32>;
-    [[size(16)]] cellSize : vec3<f32>;
-    data :  array<u32>;
+struct Data {
+    @size(16) size :  vec3<u32>,
+    @size(16) WGNum :  vec3<u32>,
+    @size(16) cellSize : vec3<f32>,
+    data :  array<u32>,
 };
-[[block]] struct Arr {
-    data : array<i32>;
+struct Arr {
+    data : array<i32>,
 };
-[[block]] struct Vars {
-    threshold : f32;
-    vertCount : atomic<u32>;
-    indexCount : atomic<u32>;
-    cellScale : u32;
+struct Vars {
+    threshold : f32,
+    vertCount : atomic<u32>,
+    indexCount : atomic<u32>,
+    cellScale : u32,
 };
-[[block]] struct Tables {
-    vertCoord : array<array<u32, 3>, 8>;
-    edge : array<array<i32, 12>, 256>;
-    edgeToVerts : array<array<i32, 2>, 12>;
-    tri : array<array<i32, 15>, 256>;
+struct Tables {
+    vertCoord : array<array<u32, 3>, 8>,
+    edge : array<array<i32, 12>, 256>,
+    edgeToVerts : array<array<i32, 2>, 12>,
+    tri : array<array<i32, 15>, 256>,
 };
-[[block]] struct U32Buffer {
-    buffer : array<u32>;
+struct U32Buffer {
+    buffer : array<u32>,
 };
-[[block]] struct TotalsBuffer {
-    val : atomic<u32>;
-    buffer : array<u32>;
+struct TotalsBuffer {
+    val : atomic<u32>,
+    buffer : array<u32>,
 };
 
-[[group(0), binding(0)]] var<storage, read> d : Data;
-[[group(0), binding(1)]] var<storage, read> tables : Tables;
+@group(0) @binding(0) var<storage, read> d : Data;
+@group(0) @binding(1) var<storage, read> tables : Tables;
 
-[[group(1), binding(0)]] var<storage, read_write> vars : Vars;
+@group(1) @binding(0) var<storage, read_write> vars : Vars;
 
-[[group(2), binding(0)]] var<storage, read_write> WGVertOffsets : U32Buffer;
-[[group(2), binding(1)]] var<storage, read_write> WGVertOffsetsTotals : TotalsBuffer;
+@group(2) @binding(0) var<storage, read_write> WGVertOffsets : U32Buffer;
+@group(2) @binding(1) var<storage, read_write> WGVertOffsetsTotals : TotalsBuffer;
 
-[[group(3), binding(0)]] var<storage, read_write> WGIndexOffsets : U32Buffer;
-[[group(3), binding(1)]] var<storage, read_write> WGIndexOffsetsTotals : TotalsBuffer;
+@group(3) @binding(0) var<storage, read_write> WGIndexOffsets : U32Buffer;
+@group(3) @binding(1) var<storage, read_write> WGIndexOffsetsTotals : TotalsBuffer;
 
 var<workgroup> localVertOffsets : array<u32, {{WGVol}}>;
 var<workgroup> localIndexOffsets : array<u32, {{WGVol}}>;
@@ -80,11 +80,11 @@ fn getVal(x : u32, y : u32, z : u32, packing : u32) -> f32 {
     return unpack(d.data[a/packing], a%packing, packing);
 }
 
-[[stage(compute), workgroup_size({{WGSizeX}}, {{WGSizeY}}, {{WGSizeZ}})]]
+@compute @workgroup_size({{WGSizeX}}, {{WGSizeY}}, {{WGSizeZ}})
 fn main(
-    [[builtin(global_invocation_id)]] id : vec3<u32>, 
-    [[builtin(local_invocation_index)]] localIndex : u32,
-    [[builtin(workgroup_id)]] WGId : vec3<u32>
+    @builtin(global_invocation_id) id : vec3<u32>, 
+    @builtin(local_invocation_index) localIndex : u32,
+    @builtin(workgroup_id) WGId : vec3<u32>
 ) {                
     var cellScale = vars.cellScale;
     var packing = {{packing}}u;

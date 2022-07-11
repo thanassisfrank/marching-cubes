@@ -1,27 +1,26 @@
-[[block]]
 struct Uniform {
-    pMat : mat4x4<f32>;
-    mvMat : mat4x4<f32>;
+    pMat : mat4x4<f32>,
+    mvMat : mat4x4<f32>,
 };
 
 struct VertexOut {
-    [[builtin(position)]] position : vec4<f32>;
-    [[location(0)]] normal : vec3<f32>;
-    [[location(1)]] eye : vec3<f32>;
-    [[location(2)]] worldPos : vec3<f32>;
+    @builtin(position) position : vec4<f32>,
+    @location(0) normal : vec3<f32>,
+    @location(1) eye : vec3<f32>,
+    @location(2) worldPos : vec3<f32>,
 };
 
 struct Light {
-    dir : vec3<f32>;
-    color : vec3<f32>;
+    dir : vec3<f32>,
+    color : vec3<f32>,
 };
 
-[[group(0), binding(0)]] var<uniform> u : Uniform;
+@group(0) @binding(0) var<uniform> u : Uniform;
 
 
-[[stage(vertex)]]
-fn vertex_main([[location(0)]] position: vec3<f32>,
-                [[location(1)]] normal: vec3<f32>) -> VertexOut
+@vertex
+fn vertex_main(@location(0) position: vec3<f32>,
+                @location(1) normal: vec3<f32>) -> VertexOut
 {
     var out : VertexOut;
     var vert : vec4<f32> = u.mvMat * vec4<f32>(position, 1.0);
@@ -34,12 +33,12 @@ fn vertex_main([[location(0)]] position: vec3<f32>,
     return out;
 }
 
-[[stage(fragment)]]
+@fragment
 fn fragment_main(
-    [[builtin(front_facing)]] frontFacing : bool, 
+    @builtin(front_facing) frontFacing : bool, 
     data: VertexOut
 ) 
-    -> [[location(0)]] vec4<f32>
+    -> @location(0) vec4<f32>
 {
     
     var light1 : Light;

@@ -8,9 +8,11 @@ import _thread
 import numpy as np
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
+static_path = "../"
+
 port = 8080
 files = json.loads(open("files.json", "r").read())
-datasets = json.loads(open("datasets.json", "r").read())
+datasets = json.loads(open(static_path + "datasets.json", "r").read())
 struct_data_formats = {
     "float32": "f",
     "uint8": "c"
@@ -39,7 +41,8 @@ def get_file_desc(files, name):
 
 # this is a simple http request handler class using the http.server interface
 class requestHandler(BaseHTTPRequestHandler):
-    static_path = ""
+    
+    static_path = "../"
 
     # method to handle requests for static files
     # the paths in the url directly translate to files under the static_path attribute

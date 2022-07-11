@@ -953,7 +953,6 @@ function createBindGroupLayouts() {
 
 }
 
-
 function getWGCount(dataObj) {
     const cellScale = dataObj.marchData.cellScale;
     var WGCount = {
@@ -1449,8 +1448,8 @@ async function getMarchCounts(dataObj, threshold) {
     passEncoder1.setBindGroup(1, marchData.bindGroups.marchVars);
     passEncoder1.setBindGroup(2, dataObj.marchData.bindGroups.vertexOffset);
     passEncoder1.setBindGroup(3, dataObj.marchData.bindGroups.indexOffset);
-    passEncoder1.dispatch(WGCount.x, WGCount.y, WGCount.z);
-    passEncoder1.endPass();
+    passEncoder1.dispatchWorkgroups(WGCount.x, WGCount.y, WGCount.z);
+    passEncoder1.end();
 
     device.queue.submit([commandEncoder.finish()])    
 
@@ -1491,8 +1490,8 @@ async function getMarchCounts(dataObj, threshold) {
         passEncoder2.setPipeline(marchData.pipelines.prefix[0]);
         passEncoder2.setBindGroup(0, dataObj.marchData.bindGroups.vertexOffset);
         passEncoder2.setBindGroup(1, marchData.bindGroups.bufferOffset);
-        passEncoder2.dispatch(thisNumBlocks);
-        passEncoder2.endPass();
+        passEncoder2.dispatchWorkgroups(thisNumBlocks);
+        passEncoder2.end();
 
         // prefix sum on indices
         var passEncoder3 = commandEncoder.beginComputePass();
@@ -1500,8 +1499,8 @@ async function getMarchCounts(dataObj, threshold) {
         passEncoder3.setBindGroup(0, dataObj.marchData.bindGroups.indexOffset);
         passEncoder3.setBindGroup(1, marchData.bindGroups.bufferOffset);
 
-        passEncoder3.dispatch(thisNumBlocks);
-        passEncoder3.endPass();
+        passEncoder3.dispatchWorkgroups(thisNumBlocks);
+        passEncoder3.end();
 
         //commandEncoder.copyBufferToBuffer(vertexOffsetBuffer, 256*4*128*2, readBuffer, 0, 4*elems);
 
@@ -1517,16 +1516,16 @@ async function getMarchCounts(dataObj, threshold) {
             passEncoder4.setBindGroup(0, dataObj.marchData.bindGroups.vertexOffset);
             passEncoder4.setBindGroup(1, marchData.bindGroups.bufferOffset);
 
-            passEncoder4.dispatch(1);
-            passEncoder4.endPass();
+            passEncoder4.dispatchWorkgroups(1);
+            passEncoder4.end();
             // for indices
             var passEncoder5 = commandEncoder.beginComputePass();
             passEncoder5.setPipeline(marchData.pipelines.prefix[1]);
             passEncoder5.setBindGroup(0, dataObj.marchData.bindGroups.indexOffset);
             passEncoder5.setBindGroup(1, marchData.bindGroups.bufferOffset);
 
-            passEncoder5.dispatch(1);
-            passEncoder5.endPass();
+            passEncoder5.dispatchWorkgroups(1);
+            passEncoder5.end();
         }
 
         await device.queue.onSubmittedWorkDone();
@@ -1628,7 +1627,7 @@ async function march(dataObj, meshObj, threshold) {
         meshObj.verts = new Float32Array();
         meshObj.normals = new Float32Array();
         meshObj.indices = new Float32Array();
-        console.log("yo, no verts")
+        console.log("no verts")
         return;
     }
 
@@ -1659,13 +1658,13 @@ async function march(dataObj, meshObj, threshold) {
     passEncoder6.setBindGroup(1, marchData.bindGroups.marchVars);
     passEncoder6.setBindGroup(2, marchOutBindGroup);
     passEncoder6.setBindGroup(3, dataObj.marchData.bindGroups.combinedOffset);
-    passEncoder6.dispatch(
+    passEncoder6.dispatchWorkgroups(
         Math.ceil(dataObj.size[0]/WGSize.x),
         Math.ceil(dataObj.size[1]/WGSize.y),
         Math.ceil(dataObj.size[2]/WGSize.z)
     );
 
-    passEncoder6.endPass();
+    passEncoder6.end();
 
     //commandEncoder.copyBufferToBuffer(marchIndexBuffer, 0, readBuffer, 0, 7776*4);
 
@@ -1928,8 +1927,8 @@ async function marchFine(dataObj, meshObj, threshold) {
         passEncoder.setBindGroup(0, marchData.bindGroups.tables);
         passEncoder.setBindGroup(1, dataObj.marchData.bindGroups.dataFine);
         passEncoder.setBindGroup(2, dataObj.marchData.bindGroups.combinedOffsetFine);
-        passEncoder.dispatch(thisNumBlocks);
-        passEncoder.endPass();
+        passEncoder.dispatchWorkgroups(thisNumBlocks);
+        passEncoder.end();
 
         device.queue.submit([commandEncoder.finish()])  
 
@@ -1973,8 +1972,8 @@ async function marchFine(dataObj, meshObj, threshold) {
         passEncoder2.setPipeline(marchData.pipelines.prefix[0]);
         passEncoder2.setBindGroup(0, dataObj.marchData.bindGroups.vertexOffsetFine);
         passEncoder2.setBindGroup(1, marchData.bindGroups.bufferOffset);
-        passEncoder2.dispatch(thisNumBlocks);
-        passEncoder2.endPass();
+        passEncoder2.dispatchWorkgroups(thisNumBlocks);
+        passEncoder2.end();
 
         // prefix sum on indices
         var passEncoder3 = commandEncoder.beginComputePass();
@@ -1982,8 +1981,8 @@ async function marchFine(dataObj, meshObj, threshold) {
         passEncoder3.setBindGroup(0, dataObj.marchData.bindGroups.indexOffsetFine);
         passEncoder3.setBindGroup(1, marchData.bindGroups.bufferOffset);
 
-        passEncoder3.dispatch(thisNumBlocks);
-        passEncoder3.endPass();
+        passEncoder3.dispatchWorkgroups(thisNumBlocks);
+        passEncoder3.end();
         
         if (numBlocks > 0) {
             var passEncoder4 = commandEncoder.beginComputePass();
@@ -1991,16 +1990,16 @@ async function marchFine(dataObj, meshObj, threshold) {
             passEncoder4.setBindGroup(0, dataObj.marchData.bindGroups.vertexOffsetFine);
             passEncoder4.setBindGroup(1, marchData.bindGroups.bufferOffset);
 
-            passEncoder4.dispatch(1);
-            passEncoder4.endPass();
+            passEncoder4.dispatchWorkgroups(1);
+            passEncoder4.end();
             // for indices
             var passEncoder5 = commandEncoder.beginComputePass();
             passEncoder5.setPipeline(marchData.pipelines.prefix[1]);
             passEncoder5.setBindGroup(0, dataObj.marchData.bindGroups.indexOffsetFine);
             passEncoder5.setBindGroup(1, marchData.bindGroups.bufferOffset);
 
-            passEncoder5.dispatch(1);
-            passEncoder5.endPass();
+            passEncoder5.dispatchWorkgroups(1);
+            passEncoder5.end();
         }
 
         await device.queue.onSubmittedWorkDone();
@@ -2065,8 +2064,8 @@ async function marchFine(dataObj, meshObj, threshold) {
         passEncoder6.setBindGroup(1, dataObj.marchData.bindGroups.dataFine);
         passEncoder6.setBindGroup(2, marchOutBindGroup);
         passEncoder6.setBindGroup(3, dataObj.marchData.bindGroups.combinedOffsetFine);
-        passEncoder6.dispatch(thisNumBlocks);
-        passEncoder6.endPass();
+        passEncoder6.dispatchWorkgroups(thisNumBlocks);
+        passEncoder6.end();
 
         commandEncoder.copyBufferToBuffer(marchVertBuffer, 0, marchData.buffers.read, 0, 10*4);
 
@@ -2285,15 +2284,18 @@ async function renderView(ctx, projMat, modelViewMat, box, meshObj) {
 
     const renderPassDescriptor = {
         colorAttachments: [{
-            loadValue: clearColor,
+            clearValue: clearColor,
+            loadOp: "clear",
             storeOp: "store",
             view: ctx.getCurrentTexture().createView()
         }],
         depthStencilAttachment: {
-            depthLoadValue: 1.0,
+            depthClearValue: 1.0,
+            depthLoadOp: "clear",
             depthStoreOp: 'discard',
-            stencilLoadValue: 0,
-            stencilStoreOp: 'store',
+            // stencilClearValue: 0,
+            // stencilLoadOp: "clear",
+            // stencilStoreOp: 'store',
             view: depthStencilTexture.createView()
           }
     };
@@ -2324,7 +2326,7 @@ async function renderView(ctx, projMat, modelViewMat, box, meshObj) {
         passEncoder.drawIndexed(meshObj.indicesNum);
     }
     
-    passEncoder.endPass();
+    passEncoder.end();
 
     device.queue.submit([commandEncoder.finish()]);
 
@@ -2336,7 +2338,8 @@ async function renderFrame() {
     var canvasTexture = ctx.getCurrentTexture();
     const renderPassDescriptor = {
         colorAttachments: [{
-            loadValue: clearColor,
+            clearValue: clearColor,
+            loadOp: "clear",
             storeOp: "store",
             view: canvasTexture.createView()
         }]
@@ -2352,7 +2355,7 @@ async function renderFrame() {
             passEncoder.copyTextureToTexture(view.frameTexture, canvasTexture, )
         }
     }
-    passEncoder.endPass();
+    passEncoder.end();
 
     device.queue.submit([commandEncoder.finish()]);
 
@@ -2360,7 +2363,7 @@ async function renderFrame() {
     // access the framebuffers for each view
     // for (view in views) {
     // device.
-    // copy each 
+    // copy each to the canvas in the correct place
 }
 
 function resizeRenderingContext(ctx) {
@@ -2371,7 +2374,7 @@ function resizeRenderingContext(ctx) {
 }
 
 
-
+/*
 function posFromIndex(i, size) {
     return {
         x: Math.floor(i/(size.y*size.z)), 
@@ -2384,23 +2387,24 @@ function getIndex(pos, size) {
     return pos.x*size.y*size.z + pos.y*size.z + pos.z;
 }
 
-const size = {
-    x: 8,
-    y: 9,
-    z: 13
-}
+// const size = {
+//     x: 8,
+//     y: 9,
+//     z: 13
+// }
 
-for (let i = 0; i < 100; i++) {
-    const pos = {
-        x: Math.floor(Math.random()*size.x),
-        y: Math.floor(Math.random()*size.y),
-        z: Math.floor(Math.random()*size.z)
-    }
-    const index = getIndex(pos, size);
-    const pos2 = posFromIndex(index, size);
-    if (pos.x != pos2.x || pos.y != pos2.y || pos.z != pos2.z) {
-        console.log(pos, pos2, index)
-        console.log("incorrect mapping")
-    }
-}
+// for (let i = 0; i < 100; i++) {
+//     const pos = {
+//         x: Math.floor(Math.random()*size.x),
+//         y: Math.floor(Math.random()*size.y),
+//         z: Math.floor(Math.random()*size.z)
+//     }
+//     const index = getIndex(pos, size);
+//     const pos2 = posFromIndex(index, size);
+//     if (pos.x != pos2.x || pos.y != pos2.y || pos.z != pos2.z) {
+//         console.log(pos, pos2, index)
+//         console.log("incorrect mapping")
+//     }
+// }
+*/
 

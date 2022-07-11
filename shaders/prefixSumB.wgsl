@@ -1,19 +1,19 @@
-[[block]] struct U32Buffer {
-    buffer : array<u32>;
+struct U32Buffer {
+    buffer : array<u32>,
 };
-[[block]] struct TotalsBuffer {
-    val : u32;
-    carry : u32;
-    buffer : array<u32>;
+struct TotalsBuffer {
+    val : u32,
+    carry : u32,
+    buffer : array<u32>,
 };
-[[block]] struct U32Val {
-    val : u32;
-};
+struct U32Val {
+    val : u32,
+}
 
-[[group(0), binding(0)]] var<storage, read_write> buffer : U32Buffer;
-[[group(0), binding(1)]] var<storage, read_write> totals : TotalsBuffer;
+@group(0) @binding(0) var<storage, read_write> buffer : U32Buffer;
+@group(0) @binding(1) var<storage, read_write> totals : TotalsBuffer;
 
-[[group(1), binding(0)]] var<storage> bufferOffset : U32Val;
+@group(1) @binding(0) var<storage> bufferOffset : U32Val;
 
 var<workgroup> blockOffset : u32;
 
@@ -30,11 +30,11 @@ fn nextPowerOf2(a : u32) -> u32 {
     return v;
 }
 
-[[stage(compute), workgroup_size({{WGPrefixSumCount}})]]
+@compute @workgroup_size({{WGPrefixSumCount}})
 fn main(
-    [[builtin(global_invocation_id)]] gid : vec3<u32>, 
-    [[builtin(local_invocation_id)]] lid : vec3<u32>,
-    [[builtin(workgroup_id)]] wid : vec3<u32>
+    @builtin(global_invocation_id) gid : vec3<u32>, 
+    @builtin(local_invocation_id) lid : vec3<u32>,
+    @builtin(workgroup_id) wid : vec3<u32>
 ) {                    
     if(lid.x == 0u) {
         blockOffset = 2u*gid.x;

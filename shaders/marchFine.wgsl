@@ -15,44 +15,44 @@
 // per-block vertex offsets (uint32)
 // per-block index offsets (uint32)
 
-[[block]] struct Tables {
-    vertCoord : array<array<u32, 3>, 8>;
-    edge : array<array<i32, 12>, 256>;
-    edgeToVerts : array<array<i32, 2>, 12>;
-    tri : array<array<i32, 15>, 256>;
-    requiredNeighbours : array<array<i32, 7>, 8>;
+@block struct Tables {
+    vertCoord : array<array<u32, 3>, 8>,
+    edge : array<array<i32, 12>, 256>,
+    edgeToVerts : array<array<i32, 2>, 12>,
+    tri : array<array<i32, 15>, 256>,
+    requiredNeighbours : array<array<i32, 7>, 8>,
 };
 
-[[block]] struct Data {
-    [[size(4)]] threshold : f32;
-    [[size(12)]] blockOffset : u32;
-    [[size(16)]] blocksSize : vec3<u32>;
-    data : array<u32>;
+@block struct Data {
+    @size(4) threshold : f32,
+    @size(12) blockOffset : u32,
+    @size(16) blocksSize : vec3<u32>,
+    data : array<u32>,
 };
 
-[[block]] struct U32Buffer {
-    buffer : array<u32>;
+@block struct U32Buffer {
+    buffer : array<u32>,
 };
 
-[[block]] struct I32Buffer {
-    buffer : array<i32>;
+@block struct I32Buffer {
+    buffer : array<i32>,
 };
 
-[[block]] struct F32Buffer {
-    buffer : array<f32>;
+@block struct F32Buffer {
+    buffer : array<f32>,
 };
 
-[[group(0), binding(0)]] var<storage, read> tables : Tables;
+@group(0) @binding(0) var<storage, read> tables : Tables;
 
-[[group(1), binding(0)]] var<storage, read> d : Data;
-[[group(1), binding(1)]] var<storage, read> activeBlocks : U32Buffer;
-[[group(1), binding(2)]] var<storage, read> locations : I32Buffer;
+@group(1) @binding(0) var<storage, read> d : Data;
+@group(1) @binding(1) var<storage, read> activeBlocks : U32Buffer;
+@group(1) @binding(2) var<storage, read> locations : I32Buffer;
 
-[[group(2), binding(0)]] var<storage, read_write> verts : F32Buffer;
-[[group(2), binding(1)]] var<storage, read_write> indices : U32Buffer;
+@group(2) @binding(0) var<storage, read_write> verts : F32Buffer;
+@group(2) @binding(1) var<storage, read_write> indices : U32Buffer;
 
-[[group(3), binding(0)]] var<storage, read_write> WGVertOffsets : U32Buffer;
-[[group(3), binding(1)]] var<storage, read_write> WGIndexOffsets : U32Buffer;
+@group(3) @binding(0) var<storage, read_write> WGVertOffsets : U32Buffer;
+@group(3) @binding(1) var<storage, read_write> WGIndexOffsets : U32Buffer;
 
 // used to get the total #verts and #indices for this block
 var<workgroup> localVertOffsets : array<u32, {{WGVol}}>;
@@ -150,12 +150,12 @@ fn cellPresent(neighbours : vec3<u32>) -> bool {
     return true;
 }
 
-[[stage(compute), workgroup_size({{WGSizeX}}, {{WGSizeY}}, {{WGSizeZ}})]]
+@compute @workgroup_size({{WGSizeX}}, {{WGSizeY}}, {{WGSizeZ}})
 fn main(
-    [[builtin(global_invocation_id)]] gid : vec3<u32>, 
-    [[builtin(local_invocation_id)]] lid : vec3<u32>,
-    [[builtin(local_invocation_index)]] localIndex : u32, 
-    [[builtin(workgroup_id)]] WGId : vec3<u32>
+    @builtin(global_invocation_id) gid : vec3<u32>, 
+    @builtin(local_invocation_id) lid : vec3<u32>,
+    @builtin(local_invocation_index) localIndex : u32, 
+    @builtin(workgroup_id) WGId : vec3<u32>
 ) {
     if (all(lid == vec3<u32>(0u))) {
         WGSize = vec3<u32>({{WGSizeX}}u, {{WGSizeY}}u, {{WGSizeZ}}u);
@@ -223,8 +223,8 @@ fn main(
                         // now increment the correct dimenson of cellsSize
                         neighboursPresent[i] = true;
                         // if (neighbourConfigs[i].x == 1u) {cellsSize.x = WGSize.x;}
-                        // elseif (neighbourConfigs[i].y == 1u) {cellsSize.y = WGSize.y;}
-                        // elseif (neighbourConfigs[i].z == 1u) {cellsSize.z = WGSize.z;}
+                        // else if (neighbourConfigs[i].y == 1u) {cellsSize.y = WGSize.y;}
+                        // else if (neighbourConfigs[i].z == 1u) {cellsSize.z = WGSize.z;}
                     }
                 }
             }
@@ -390,7 +390,7 @@ fn main(
     if (localIndex == 0u) {
         localVertOffsets[WGVol - 1u] = 0u;
         
-    } elseif (localIndex == halfl) {
+    } else if (localIndex == halfl) {
         localIndexOffsets[WGVol - 1u] = 0u;
     }
     

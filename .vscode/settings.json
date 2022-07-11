@@ -1,0 +1,15 @@
+{
+    "files.associations": {
+        "*.ipp": "c",
+        "random": "c",
+        "array": "c",
+        "vector": "c",
+        "xstring": "c",
+        "xutility": "c",
+        "multi_span": "c",
+        "span": "c",
+        "string_span": "c",
+        "variant": "c",
+        "gsl_util": "c"
+    }
+}
