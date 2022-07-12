@@ -1,9 +1,21 @@
 // utils.js
 
-export {get, getCtx, create, setupCanvasDims, getFirstOfClass, repositionCanvas, sin30, cos30, toRads, unZipVerts, newId, stringFormat, dataTypes, clampBox};
+export {get, isVisible, hide, show, getCtx, create, setupCanvasDims, getFirstOfClass, repositionCanvas, sin30, cos30, toRads, unZipVerts, newId, stringFormat, dataTypes, clampBox};
 
 var get = (id) => {
     return document.getElementById(id)
+}
+
+var isVisible = (elem) => {
+    return getComputedStyle(elem).visibility == "visible";
+}
+
+var hide = (elem) => {
+    elem.style.visibility = "hidden";
+}
+
+var show = (elem) => {
+    elem.style.visibility = "visible";
 }
 
 var getCtx = (canvas, type) => {

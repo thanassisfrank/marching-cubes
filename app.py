@@ -8,7 +8,7 @@ import _thread
 import numpy as np
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-static_path = "../"
+static_path = "static/"
 
 port = 8080
 files = json.loads(open("files.json", "r").read())
@@ -41,9 +41,6 @@ def get_file_desc(files, name):
 
 # this is a simple http request handler class using the http.server interface
 class requestHandler(BaseHTTPRequestHandler):
-    
-    static_path = "../"
-
     # method to handle requests for static files
     # the paths in the url directly translate to files under the static_path attribute
     def do_GET(self):
@@ -53,14 +50,14 @@ class requestHandler(BaseHTTPRequestHandler):
             if not file_desc:
                 raise OSError("file not in directory")
             if file_desc["encoding"]:
-                file = open(self.static_path + file_name, "r")
+                file = open(static_path + file_name, "r")
                 self.send_response(200)
                 self.send_header("content-type", file_desc["contentType"])
                 self.end_headers()
                 self.wfile.write(bytes(file.read(), file_desc["encoding"]))
                 file.close()
             else:
-                file = open(self.static_path + file_name, "rb")
+                file = open(static_path + file_name, "rb")
                 self.send_response(200)
                 self.send_header("content-type", file_desc["contentType"])
                 self.end_headers()
@@ -115,7 +112,7 @@ class requestHandler(BaseHTTPRequestHandler):
         # get dataset info
         data_info = datasets[request["name"]]
         # load the dataset TODO: load chunks at a time
-        file = open("data/" + data_info["path"], "rb")
+        file = open(static_path + "data/" + data_info["path"], "rb")
         if request["cellScale"] == 1:
             # if the cell scale is 1, the whole data is needed
             self.wfile.write(file.read())
@@ -162,8 +159,8 @@ class requestHandler(BaseHTTPRequestHandler):
     def handleThresholdDataRequest(self, request):
         data_info = datasets[request["name"]]
         # load the dataset TODO: load chunks at a time
-        data_file = open("data/" + data_info["path"], "rb")
-        path = "data/" + data_info["path"].split(".")[0] + "_limits.raw"
+        data_file = open(static_path + "data/" + data_info["path"], "rb")
+        path = static_path +"data/" + data_info["path"].split(".")[0] + "_limits.raw"
         limits_file = open(path, "rb")
 
         data_type = ""
@@ -235,7 +232,7 @@ class requestHandler(BaseHTTPRequestHandler):
         # data_file = open("data/" + data_info["path"], "rb")
         # path = "data/" + data_info["path"].split(".")[0] + "_limits.raw"
 
-        data_file = open("data/" + data_info["path"].split(".")[0] + "_blocks.raw", "rb")
+        data_file = open(static_path + "data/" + data_info["path"].split(".")[0] + "_blocks.raw", "rb")
 
         data_type = None
 

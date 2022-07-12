@@ -15,7 +15,7 @@
 // per-block vertex offsets (uint32)
 // per-block index offsets (uint32)
 
-@block struct Tables {
+struct Tables {
     vertCoord : array<array<u32, 3>, 8>,
     edge : array<array<i32, 12>, 256>,
     edgeToVerts : array<array<i32, 2>, 12>,
@@ -23,22 +23,22 @@
     requiredNeighbours : array<array<i32, 7>, 8>,
 };
 
-@block struct Data {
+struct Data {
     @size(4) threshold : f32,
     @size(12) blockOffset : u32,
     @size(16) blocksSize : vec3<u32>,
     data : array<u32>,
 };
 
-@block struct U32Buffer {
+struct U32Buffer {
     buffer : array<u32>,
 };
 
-@block struct I32Buffer {
+struct I32Buffer {
     buffer : array<i32>,
 };
 
-@block struct F32Buffer {
+struct F32Buffer {
     buffer : array<f32>,
 };
 
@@ -124,9 +124,9 @@ fn getIndexCount(code : u32) -> u32 {
     return i;
 }
 
-fn all(bools : vec3<bool>) -> bool {
-    return bools.x && bools.y && bools.z;
-}
+// fn all(bools : vec3<bool>) -> bool {
+//     return bools.x && bools.y && bools.z;
+// }
 
 fn cellPresent(neighbours : vec3<u32>) -> bool {
     if (all(neighbours == vec3<u32>(0u))) {

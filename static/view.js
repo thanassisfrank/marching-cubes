@@ -1,7 +1,7 @@
 // view.js
 // handles the creation of view objects, their management and deletion
 
-import { get, create, toRads, newId } from "./utils.js";
+import { get, show, create, toRads, newId } from "./utils.js";
 
 import { VecMath } from "./VecMath.js";
 import {mat4} from 'https://cdn.skypack.dev/gl-matrix';
@@ -57,30 +57,23 @@ var viewManager = {
         return newView;
     },
     createViewDOM: function(id, view) {
-        // create div element for frame
-        var viewContainer = create("DIV");
-        viewContainer.classList.add("view-container");
+        // clone the proto node
+        var viewContainer = get("view-container-proto").cloneNode(true);
         viewContainer.id = id;
-        var frame = create("DIV");
-        frame.tabindex = 0;
-        frame.classList.add("view-frame");
-        var slider = create("INPUT");
-        slider.type = "range";
-        slider.min = Math.max(view.data.limits[0] - 10, 0);
-        slider.max = view.data.limits[1] + 10;
-        slider.value = (view.data.limits[0] + view.data.limits[1])/2;
-        slider.step = (view.data.limits[0] - view.data.limits[1]) * 100;
-        var closeBtn = create("BUTTON");
+
+        var slider = viewContainer.getElementsByTagName("INPUT")[0];
+        var frame = viewContainer.getElementsByTagName("DIV")[0];
+        var closeBtn = viewContainer.getElementsByTagName("BUTTON")[0];
+
+        slider.min = Math.max(view.data.limits[0] - 10, 0); //###
+        slider.max = view.data.limits[1] + 10;              //###
+        slider.value = (view.data.limits[0] + view.data.limits[1])/2; //###
+        slider.step = (view.data.limits[0] - view.data.limits[1]) * 100; //###
+
+
         closeBtn.onclick = () => {
             this.deleteView(view);
         }
-        closeBtn.innerHTML = "X";
-        //var text = create("P");
-        //text.innerHTML = id;
-        viewContainer.appendChild(frame);
-        viewContainer.appendChild(slider);
-        viewContainer.appendChild(closeBtn)
-        //viewContainer.appendChild(text);
 
         // set event listeners for the elements
         frame.onmousedown = function(e) {
@@ -97,7 +90,6 @@ var viewManager = {
                 // rotate
                 view.camera.startMove(e.movementX, e.movementY, 0, "orbit");
             }
-            
         };
         frame.onmousemove = function(e) {
             const shiftFac = 3;
@@ -140,6 +132,7 @@ var viewManager = {
         // to update view.box
 
         get("view-container-container").appendChild(viewContainer);
+        show(viewContainer);
 
     }, 
     deleteView: function(view) {

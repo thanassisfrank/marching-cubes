@@ -2261,10 +2261,52 @@ function deleteBuffers(meshObj) {
     //delete buffers[id];
 };
 
-function clearScreen() {};
+async function clearScreen(ctx) {
+    var commandEncoder = device.createCommandEncoder();
+    // provide details of load and store part of pass
+    // here there is one color output that will be cleared on load
+
+    var depthStencilTexture = device.createTexture({
+        size: {
+          width: ctx.canvas.width,
+          height: ctx.canvas.height,
+          depth: 1
+        },
+        dimension: '2d',
+        format: 'depth32float',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT
+    });
+
+    const renderPassDescriptor = {
+        colorAttachments: [{
+            clearValue: clearColor,
+            loadOp: "clear",
+            storeOp: "store",
+            view: ctx.getCurrentTexture().createView()
+        }],
+        depthStencilAttachment: {
+            depthClearValue: 1.0,
+            depthLoadOp: "clear",
+            depthStoreOp: 'discard',
+            view: depthStencilTexture.createView()
+          }
+    };
+
+    await commandEncoder;
+    const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
+    
+    passEncoder.end();
+
+    device.queue.submit([commandEncoder.finish()]);
+
+    depthStencilTexture.destroy();
+};
 
 async function renderView(ctx, projMat, modelViewMat, box, meshObj) {
-    if (meshObj.indicesNum == 0) return;
+    if (meshObj.indicesNum == 0) {
+        clearScreen(ctx);
+        return;
+    }
     
 
     var commandEncoder = device.createCommandEncoder();

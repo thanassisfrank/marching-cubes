@@ -1,6 +1,6 @@
 // main.js
 
-import {get, setupCanvasDims, repositionCanvas} from "./utils.js";
+import {get, isVisible, show, hide, setupCanvasDims, repositionCanvas} from "./utils.js";
 
 import {dataManager} from "./data.js";
 import {cameraManager} from "./camera.js";
@@ -97,6 +97,20 @@ async function main() {
                 waiting = false;
             }, 50);
         }
+    }
+
+    // setup the view creation window button
+    get("add-view").onclick = function() {
+        var addViewPopup = get("add-view-popup");
+        if (isVisible(addViewPopup)) {
+            hide(addViewPopup);
+            get("add-view").innerText = "+";
+        } else {
+            show(addViewPopup);
+            get("add-view").innerText = "X";
+        }
+        // populate options
+        //populate
     }
 
 

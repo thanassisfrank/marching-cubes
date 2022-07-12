@@ -116,9 +116,9 @@ fn getIndexCount(code : u32) -> u32 {
     return i;
 }
 
-fn all(bools : vec3<bool>) -> bool {
-    return bools.x && bools.y && bools.z;
-}
+// fn all(bools : vec3<bool>) -> bool {
+//     return bools.x && bools.y && bools.z;
+// }
 
 fn cellPresent(neighbours : vec3<u32>) -> bool {
     if (all(neighbours == vec3<u32>(0u))) {
@@ -135,7 +135,7 @@ fn cellPresent(neighbours : vec3<u32>) -> bool {
             // if still in loop then it has passed
             break;
         }
-        if (neighboursPresent[tables.requiredNeighbours[code][i == false) {
+        if (neighboursPresent[tables.requiredNeighbours[code][i]] == false) {
             return false;
         }
 
