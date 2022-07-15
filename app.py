@@ -112,7 +112,7 @@ class requestHandler(BaseHTTPRequestHandler):
         # get dataset info
         data_info = datasets[request["name"]]
         # load the dataset TODO: load chunks at a time
-        file = open(static_path + "data/" + data_info["path"], "rb")
+        file = open(static_path + data_info["path"], "rb")
         if request["cellScale"] == 1:
             # if the cell scale is 1, the whole data is needed
             self.wfile.write(file.read())
@@ -159,8 +159,8 @@ class requestHandler(BaseHTTPRequestHandler):
     def handleThresholdDataRequest(self, request):
         data_info = datasets[request["name"]]
         # load the dataset TODO: load chunks at a time
-        data_file = open(static_path + "data/" + data_info["path"], "rb")
-        path = static_path +"data/" + data_info["path"].split(".")[0] + "_limits.raw"
+        data_file = open(static_path + data_info["path"], "rb")
+        path = static_path + data_info["path"].split(".")[0] + "_limits.raw"
         limits_file = open(path, "rb")
 
         data_type = ""
@@ -232,7 +232,7 @@ class requestHandler(BaseHTTPRequestHandler):
         # data_file = open("data/" + data_info["path"], "rb")
         # path = "data/" + data_info["path"].split(".")[0] + "_limits.raw"
 
-        data_file = open(static_path + "data/" + data_info["path"].split(".")[0] + "_blocks.raw", "rb")
+        data_file = open(static_path + data_info["path"].split(".")[0] + "_blocks.raw", "rb")
 
         data_type = None
 

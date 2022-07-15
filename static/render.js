@@ -5,7 +5,7 @@ import * as gpu from "./webGPU.js";
 import * as gl from "./webgl.js";
 import {module as marchModule} from "./march.js";
 
-export {setRenderModule, setupRenderer, createBuffers, updateMeshBuffers, renderView, deleteBuffers, clearScreen, resizeRenderingContext};
+export {setRenderModule, setupRenderer, createBuffers, buffersUpdateNeeded, updateMeshBuffers, renderView, renderPoints, deleteBuffers, clearScreen, resizeRenderingContext};
 
 var module;
 
@@ -41,11 +41,13 @@ function createBuffers(...args) {
     }
 }
 
+function buffersUpdateNeeded(...args) {
+    return module == "gpu" && marchModule != "gpu"
+}
+
 function updateMeshBuffers(...args) {
     if (module == "gpu") {
-        if (marchModule != "gpu") {
-            return gpu.updateBuffers(...args);
-        }
+        return gpu.updateBuffers(...args);
     } else {
         return gl.updateBuffers(...args);
     }
@@ -56,6 +58,12 @@ function renderView(...args) {
         return gpu.renderView(...args);
     } else {
         return gl.renderView(...args);
+    }
+}
+
+function renderPoints(...args) {
+    if (module == "gpu") {
+        return gpu.renderPoints(...args);
     }
 }
 

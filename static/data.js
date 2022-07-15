@@ -3,7 +3,8 @@
 
 import {VecMath} from "./VecMath.js";
 import {vec3} from "https://cdn.skypack.dev/gl-matrix";
-import { newId, dataTypes } from "./utils.js";
+import { newId, DATA_TYPES, xyzToA, parseXML } from "./utils.js";
+import { decompressB64Str, getNumPiecesFromVTS, getDataNamesFromVTS, getPointsFromVTS, getExtentFromVTS, getPointDataFromVTS, getDataLimitsFromVTS} from "./dataUnpacker.js"
 export {dataManager};
 
 const blockSize = [4, 4, 4]
@@ -25,6 +26,7 @@ var dataManager = {
     // {
     //     "name": "engine",
     //     "path": "engine_256x256x128_uint8.raw",
+    //     "type": "raw",
     //     "size": {
     //         "x": 128,
     //         "y": 256,
@@ -37,33 +39,44 @@ var dataManager = {
     //     },
     //     "dataType": "uint8"
     //     "f": some function
+    //     "accessType": "whole"/"complex"
     // }
     createData: async function(config){
         const id = newId(this.datas);
         var newData = new this.Data(id);
-        if (config.name) {
-            // this is going to use the complex dataset handling mechanism
-            await newData.createComplex(config)
-        } else if (config.src) {
-            // create a new data object from a file
-            await newData.fromFile(config.src, config.dataType, config.x, config.y, config.z)
-        } else if (config.f) {
+        if (config.f) {
             //create data from the supplied function
-            newData.generateData(config.x, config.y, config.z, config.f);
+            newData.generateData(...xyzToA(config.size), config.f);
+        } else if (config.type == "raw") {
+            // handle raw data
+            if (config.accessType == "complex") {
+                // this is going to use the complex dataset handling mechanism
+                await newData.createComplex(config)
+            } else if (config.accessType == "whole") {
+                // create a new data object from a file
+                await newData.fromRawFile(config.path, DATA_TYPES[config.dataType], ...xyzToA(config.size))
+            }
+        } else if (config.type == "structuredGrid") {
+            // handle structured grid .vts files
+            await newData.fromVTSFile(config.path);
         }
-        //newData.setCellSize()
+        
         this.datas[id] = newData;
 
         return newData;
     },
     Data: function(id) {
         this.id = id;
-        // a set of data that covers the whole dataset
+        // a set of data associated with points
         // complex:
         // - a low resolution of whole dataset for fast scrolling
         // simple:
         // - the whole dataset
         this.data = [];
+        // what this.data represents
+        this.dataName = "";
+        // used by the .vts format to place points in space
+        this.points = [];
         // used to store the limit values of each block if in complex mode
         this.blockLimits = [];
         // used to store fine data for complex mode
@@ -72,6 +85,8 @@ var dataManager = {
         this.blocksSize = [];
         // flag for if this is a complex data object
         this.complex = false;
+        // flag for if this is a structuredgrid object (.vts)
+        this.structuredGrid = false;
         this.normals = [];
         this.normalsInitialised = false;
         this.normalsPopulated = false;
@@ -88,6 +103,7 @@ var dataManager = {
         this.size = [];
         this.cellSize = [1, 1, 1];
 
+        // min, max
         this.limits = [undefined, undefined];
         // holds any information the marching implementation needs e.g. the data buffer on gpu
         this.marchData = {};
@@ -120,6 +136,25 @@ var dataManager = {
             this.initialised = true;
             console.log("initialised");
         }
+        this.initialiseVTS = function(x, y, z,) {
+            this.normalsInitialised = false;
+            this.normalsPopulated = false;
+            this.volume = x * y * z; // total number of points
+            this.size = [x, y, z]; // in points
+            this.maxCellSize = 1; // so camera initialises properly
+            this.cellsCount = (x-1)*(y-1)*(z-1);
+
+            // get two points on opposit corners
+            const p0 = [this.points[0], this.points[1], this.points[2]]
+            const p1 = [this.points[this.cellsCount], this.points[this.cellsCount+1], this.points[this.cellsCount+2]]
+
+            this.maxSize = VecMath.magnitude(VecMath.vecMinus(p0, p1));
+            this.midPoint = VecMath.scalMult(0.5, VecMath.vecAdd(p0, p1));
+            
+            
+            this.initialised = true;
+            console.log("initialised");
+        }
         this.generateData = function(x, y, z, f) {
             let v = 0.0;
             this.data = new Float32Array(x * y * z);
@@ -140,7 +175,7 @@ var dataManager = {
             console.log(this.limits);
             this.initialise(x, y, z, ...this.cellSize);
         };
-        this.fromFile = function(src, DataType, x, y, z) {
+        this.fromRawFile = function(src, DataType, x, y, z) {
             var that = this;
             this.data = new ArrayBuffer(x * y * z * DataType.BYTES_PER_ELEMENT);
             var finished = new Promise(resolve => {
@@ -178,6 +213,23 @@ var dataManager = {
             });
     
             return finished;
+        }
+        this.fromVTSFile = function(src) {
+            var that = this;
+            that.structuredGrid = true;
+            return fetch(src)
+                .then(res => res.text())
+                .then(text => parseXML(text))
+                .then((fileDOM) => {
+                    that.points = getPointsFromVTS(fileDOM, 0);
+                    // get the first dataset
+                    var pointDataNames = getDataNamesFromVTS(fileDOM, 0);
+                    this.data = getPointDataFromVTS(fileDOM, 0, pointDataNames[0]);
+                    // get the limtis for the dataset
+                    this.limits = getDataLimitsFromVTS(fileDOM, 0, pointDataNames[0]);
+                    console.log(this.limits);
+                    that.initialiseVTS(...getExtentFromVTS(fileDOM, 0));
+                });
         }
         this.setCellSize = function(size) {
             this.cellSize = size;
@@ -235,13 +287,13 @@ var dataManager = {
             var responseBuffer = await response.arrayBuffer();
 
             // create an array of correct type and store in this.data
-            this.data = new dataTypes[config.dataType](responseBuffer);
+            this.data = new DATA_TYPES[config.dataType](responseBuffer);
 
             // get the block limits data from the server
             var pathSplit = config.path.split(".");
-            const limitsResponse = await fetch("/data/" + pathSplit[0] + "_limits." + pathSplit[1]);
+            const limitsResponse = await fetch(pathSplit[0] + "_limits." + pathSplit[1]);
             const limitsBuffer = await limitsResponse.arrayBuffer();
-            this.blockLimits = new dataTypes[config.dataType](limitsBuffer)
+            this.blockLimits = new DATA_TYPES[config.dataType](limitsBuffer)
 
             // console.log(this.blockLimits)
 
@@ -284,7 +336,7 @@ var dataManager = {
                 body: JSON.stringify(request)
             }).then(response => 
                 response.arrayBuffer().then(buffer => 
-                    new dataTypes[that.config.dataType](buffer)
+                    new DATA_TYPES[that.config.dataType](buffer)
                 )
             )
 
@@ -344,14 +396,14 @@ var dataManager = {
                 body: JSON.stringify(request)
             }).then(response => 
                 response.arrayBuffer().then(buffer => 
-                    new dataTypes[that.config.dataType](buffer)
+                    new DATA_TYPES[that.config.dataType](buffer)
                 )
             )
         }
 
         // only works with 4x4x4 and when resolution is 1
         this.fetchFineFromCoarse = function(blocks) {
-            var out = new dataTypes[this.config.dataType](blocks.length*64);
+            var out = new DATA_TYPES[this.config.dataType](blocks.length*64);
             var num = 0;
             let block_pos, i, j, k;
             for (let blockNum = 0; blockNum < blocks.length; blockNum++) {

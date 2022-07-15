@@ -1,7 +1,8 @@
 {
     "engine": {
         "name": "engine",
-        "path": "engine_256x256x128_uint8.raw",
+        "path": "data/engine_256x256x128_uint8.raw",
+        "type": "raw",
         "size": {
             "x": 128,
             "y": 256,
@@ -17,7 +18,8 @@
     },
     "magnetic": {
         "name": "magnetic",
-        "path": "magnetic_reconnection_512x512x512_float32.raw",
+        "path": "data/magnetic_reconnection_512x512x512_float32.raw",
+        "type": "raw",
         "size": {
             "x": 512,
             "y": 512,
@@ -33,7 +35,8 @@
     },
     "silicium": {
         "name": "silicium",
-        "path": "silicium_98x34x34_uint8.raw",
+        "path": "data/silicium_98x34x34_uint8.raw",
+        "type": "raw",
         "size": {
             "x": 34,
             "y": 34,
@@ -49,7 +52,8 @@
     },
     "simple": {
         "name": "simple",
-        "path": "simple.raw",
+        "path": "data/simple.raw",
+        "type": "raw",
         "size": {
             "x": 16,
             "y": 16,
@@ -65,7 +69,8 @@
     },
     "sphere": {
         "name": "sphere",
-        "path": "sphere.raw",
+        "path": "data/sphere.raw",
+        "type": "raw",
         "size": {
             "x": 16,
             "y": 16,
@@ -78,5 +83,38 @@
         },
         "limits": [0, 64],
         "dataType": "uint8"
+    },
+    "multicomb_0": {
+        "name": "Multicomb_0",
+        "path": "data/multicomb_0.vts",
+        "type": "structuredGrid",
+        "size": {
+            "x": 15,
+            "y": 32,
+            "z": 24
+        },
+        "dataType": "float32"
+    },
+    "multicomb_0_simple": {
+        "name": "Multicomb_0",
+        "path": "data/multicomb_0_simple.vts",
+        "type": "structuredGrid",
+        "size": {
+            "x": 15,
+            "y": 32,
+            "z": 24
+        },
+        "dataType": "float32"
+    },
+    "bluntfin_simple": {
+        "name": "Blunt fin",
+        "path": "data/bluntfin_simple.vts",
+        "type": "structuredGrid",
+        "size": {
+            "x": 31,
+            "y": 31,
+            "z": 39
+        },
+        "dataType": "float32"
     }
 }

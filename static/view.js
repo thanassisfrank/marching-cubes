@@ -1,23 +1,24 @@
 // view.js
 // handles the creation of view objects, their management and deletion
 
-import { get, show, create, toRads, newId } from "./utils.js";
+import { get, show, toRads, newId } from "./utils.js";
 
 import { VecMath } from "./VecMath.js";
 import {mat4} from 'https://cdn.skypack.dev/gl-matrix';
-import {createBuffers, updateMeshBuffers, deleteBuffers, clearScreen, renderView} from "./render.js";
-
-// import { generateMesh } from "./marching.js";
-// import { generateMeshWasm } from "./marchingWasm.js";
-// import {march} from "./webGPU.js";
+import {buffersUpdateNeeded, updateMeshBuffers, deleteBuffers, clearScreen, renderView} from "./render.js";
 
 import { march, marchFine } from "./march.js";
 
-export {viewManager};
+export {viewManager, renderModes};
 
-
+const renderModes = {
+    ISO_SURFACE: 1,
+    DATA_POINTS: 2,
+    ISO_POINTS: 3
+}
 
 var viewManager = {
+    
     maxViews: 30,
     // an object to hold all views that have been created
     views: {},
@@ -30,6 +31,7 @@ var viewManager = {
         // check what type of linking is required
     
         // FOR INITIAL IMPLEMENTATION: no linking is supported
+        // some linking is working
     
         //check to see if there is already the max amount of views
         if (!this.moreViewsAllowed()) return false;
@@ -52,6 +54,7 @@ var viewManager = {
         var newView = new this.View(id, camera, data,  mesh);
         this.createViewDOM(id, newView);
         this.views[id] = newView;
+        newView.renderMode = config.renderMode || renderModes.ISO_SURFACE;
         newView.init();
 
         return newView;
@@ -65,10 +68,11 @@ var viewManager = {
         var frame = viewContainer.getElementsByTagName("DIV")[0];
         var closeBtn = viewContainer.getElementsByTagName("BUTTON")[0];
 
-        slider.min = Math.max(view.data.limits[0] - 10, 0); //###
-        slider.max = view.data.limits[1] + 10;              //###
-        slider.value = (view.data.limits[0] + view.data.limits[1])/2; //###
-        slider.step = (view.data.limits[0] - view.data.limits[1]) * 100; //###
+        slider.min = view.data.limits[0];//Math.max(view.data.limits[0], 0);
+        slider.max = view.data.limits[1];
+        slider.value = (view.data.limits[0] + view.data.limits[1]) / 2;
+        slider.step = (view.data.limits[1] - view.data.limits[0]) / 100;
+        console.log(slider);
 
 
         closeBtn.onclick = () => {
@@ -76,6 +80,7 @@ var viewManager = {
         }
 
         // set event listeners for the elements
+        const shiftFac = 0.5;
         frame.onmousedown = function(e) {
             if (frame.requestPointerLock) {
                 frame.requestPointerLock();
@@ -92,7 +97,6 @@ var viewManager = {
             }
         };
         frame.onmousemove = function(e) {
-            const shiftFac = 3;
             var x = e.movementX;
             var y = e.movementY;
             if (e.shiftKey) {
@@ -159,6 +163,7 @@ var viewManager = {
         this.mesh = mesh;
         this.threshold = (this.data.limits[0] + this.data.limits[1])/2;
         this.updating = false;
+        this.renderMode = renderModes.ISO_SURFACE;
         // holds a timer that waits for a little while after the threshold has stopped changing
         // then generates a fine mesh
         this.fineTimer = {
@@ -169,10 +174,19 @@ var viewManager = {
         }
         this.box = {};
         this.init = function() {
-            //this.bufferId = createBuffers();
-            this.updateThreshold(this.threshold);
+            // do the correct type of initialisation based upon the rendering mode
+            if (this.renderMode == renderModes.DATA_POINTS) {
+                // transfer the points from the data object to the mesh
+                this.transferPointsToMesh();
+                this.updateBuffers()
+            } else if (this.renderMode == renderModes.ISO_SURFACE ||this.renderMode == renderModes.ISO_POINTS) {
+                this.updateThreshold(this.threshold);
+            }            
         }
         this.updateThreshold = async function(val) {
+            // only update the mesh if marching is needed
+            if (this.renderMode == renderModes.DATA_POINTS) return;
+            console.log(val);
             // stops the fine timer running if it is
             clearTimeout(this.fineTimer.timer)
             if (this.data.initialised){
@@ -180,16 +194,21 @@ var viewManager = {
                     this.updating = true;
                     this.threshold = val;
                     const t0 = performance.now();
-                    await this.generateMesh();
+                    await this.generateIsoMesh();
                     const time = performance.now()-t0;
-                    // if (updateBuffersNeeded()) this.updateBuffers();
-                    this.updateBuffers();
+                    if (buffersUpdateNeeded()) this.updateBuffers();
                     //view.timeLogs.push([this.mesh.verts.length/3 | this.mesh.vertNum, time]);
                     this.updating = false;
+                    console.log("done mesh")
                 };
             };
         }
-        this.generateMesh = async function() {
+        this.transferPointsToMesh = function() {
+            this.mesh.verts = this.data.points;
+            this.mesh.normals = new Float32Array(this.data.volume*3);
+            this.mesh.vertsNum = this.data.volume;
+        }
+        this.generateIsoMesh = async function() {
             await march(this.data, this.mesh, this.threshold);
 
             if (this.data.complex) {
@@ -229,7 +248,13 @@ var viewManager = {
             // find place for model mat
             // find place for indices length
             if (this.data.initialised) {
-                renderView(gl, this.camera.projMat, this.camera.getModelViewMat(), this.getBox(), this.mesh);
+                if (this.renderMode == renderModes.ISO_SURFACE) {
+                    //console.log("iso");
+                    renderView(gl, this.camera.projMat, this.camera.getModelViewMat(), this.getBox(), this.mesh, false);
+                } else if (this.renderMode == renderModes.ISO_POINTS || this.renderMode == renderModes.DATA_POINTS) {
+                    console.log("points");
+                    renderView(gl, this.camera.projMat, this.camera.getModelViewMat(), this.getBox(), this.mesh, true);
+                }
             };
         }
         this.delete = function() {

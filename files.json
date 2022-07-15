@@ -75,6 +75,61 @@
         "contentType": "text/javascript"
     },
     {
+        "path": "dataUnpacker.js",
+        "encoding": "utf8",
+        "contentType": "text/javascript"
+    },
+    {
+        "path": "base64.js",
+        "encoding": "utf8",
+        "contentType": "text/javascript"
+    },
+    {
+        "path": "pako.js",
+        "encoding": "utf8",
+        "contentType": "text/javascript"
+    },
+    {
+        "path": "vtk/IO/XML/XMLPolyDataReader/index.js",
+        "encoding": "utf8",
+        "contentType": "text/javascript"
+    },
+    {
+        "path": "vtk/macros.js",
+        "encoding": "utf8",
+        "contentType": "text/javascript"
+    },
+    {
+        "path": "vtk/Common/DataModel/PolyData/index.js",
+        "encoding": "utf8",
+        "contentType": "text/javascript"
+    },
+    {
+        "path": "vtk/IO/XML/XMLReader/index.js",
+        "encoding": "utf8",
+        "contentType": "text/javascript"
+    },
+    {
+        "path": "vtk/vtk.js",
+        "encoding": "utf8",
+        "contentType": "text/javascript"
+    },
+    {
+        "path": "vtk/Common/Core/ClassHierarchy/index.js",
+        "encoding": "utf8",
+        "contentType": "text/javascript"
+    },
+    {
+        "path": "jsm/libs/fflate.module.js",
+        "encoding": "utf8",
+        "contentType": "text/javascript"
+    },
+    {
+        "path": "jsm/loaders/VTKLoader.js",
+        "encoding": "utf8",
+        "contentType": "text/javascript"
+    },
+    {
         "path": "datasets.json",
         "encoding": "utf8",
         "contentType": "application/json"
@@ -170,6 +225,11 @@
         "contentType": "text/plain"
     },
     {
+        "path": "shaders/marchStructuredGrid.wgsl",
+        "encoding": "utf8",
+        "contentType": "text/plain"
+    },
+    {
         "path": "shaders/prefixSumA.wgsl",
         "encoding": "utf8",
         "contentType": "text/plain"
@@ -181,6 +241,26 @@
     },
     {
         "path": "shaders/shader.wgsl",
+        "encoding": "utf8",
+        "contentType": "text/plain"
+    },
+    {
+        "path": "data/multicomb_0.vts",
+        "encoding": "utf8",
+        "contentType": "text/plain"
+    },
+    {
+        "path": "data/multicomb_0_simple.vts",
+        "encoding": "utf8",
+        "contentType": "text/plain"
+    },
+    {
+        "path": "data/bluntfin_simple.vts",
+        "encoding": "utf8",
+        "contentType": "text/plain"
+    },
+    {
+        "path": "data/cube_binary.vtp",
         "encoding": "utf8",
         "contentType": "text/plain"
     }

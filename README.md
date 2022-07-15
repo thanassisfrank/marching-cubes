@@ -65,7 +65,7 @@ Handles the creation and management of data objects. Each can be created from an
 
 ### <mark>mesh.js
 Handles the creation and management of mesh objects. A mesh object holds the vertex, index and normal buffers that make up a, isosurface mesh that has been extracted at a particular threshold value. If these are stored on the CPU then there are arrays for this.  
-If they are stored in the GPU as for webgpu, they are referenced using the mesh's `id`.
+If they are stored in the GPU as for webgpu, the mesh object retains references to them.
 
 ### <mark>camera.js
 Handles the creation and management of camera objects. Each camera object keeps a track of the absolute position of a camera in world space, including its position, target position (which it will always look towards), fov and the matricies that correspond to its camera transform for rendering.

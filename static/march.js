@@ -41,6 +41,7 @@ async function setupMarch(...args) {
     }
 }
 
+// called when marching a regular grid of raw data
 async function march(...args) {
     if (module == "gpu") {
         await gpu.march(...args);
@@ -51,8 +52,14 @@ async function march(...args) {
     }
 }
 
+// called when marching
 async function marchFine(...args) {
     if (module == "gpu") {
         await gpu.marchFine(...args);
     }
+}
+
+// called when marching a .vlc file
+async function marchStructuredGrid(...args) {
+    
 }

@@ -51,6 +51,8 @@ fn fragment_main(
 
     var E = normalize(data.eye);
     //var N = normalize(data.normal);
+    
+    // extract the normal from the view-space orientation
     var N = -normalize(cross(dpdx(data.eye), dpdy(data.eye)));
 
     if (frontFacing) {

@@ -22,6 +22,7 @@ var meshManager = {
         this.indices = [];
         this.normals = [];
         this.indicesNum = 0;
+        this.vertsNum = 0;
         this.clear = function() {
             this.verts = [];
             this.indices = [];
