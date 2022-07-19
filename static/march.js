@@ -58,8 +58,3 @@ async function marchFine(...args) {
         await gpu.marchFine(...args);
     }
 }
-
-// called when marching a .vlc file
-async function marchStructuredGrid(...args) {
-    
-}

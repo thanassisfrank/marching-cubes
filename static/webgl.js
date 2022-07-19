@@ -57,7 +57,7 @@ const fsSource = `
 
     void main() {
         vec3 E = normalize(vEye);
-        vec3 N = normalize(vNormal);
+        vec3 N = -normalize(cross(dFdx(vEye), dFdy(vEye)));
         
         float diffuseFac = max(dot(-N, light1.dir), 0.0);
         
@@ -215,7 +215,7 @@ function createBuffers() {
     return id;
 }
 
-function updateBuffers(mesh, id) {
+function updateBuffers(mesh) {
     var thisBuffers = {};
     gl.bindBuffer(gl.ARRAY_BUFFER, thisBuffers.position);
     gl.bufferData(gl.ARRAY_BUFFER, Float32Array.from(mesh.verts), gl.DYNAMIC_DRAW);
@@ -246,9 +246,8 @@ function clearScreen(gl) {
     gl.clearColor(...clearColor);
 }
 
-// for rendering a particular set of buffers associated with a view
-var renderView = function(gl, projMat, modelViewMat, box, meshObj) {
-    if (!buffers[id]) return;
+// for rendering a particular set of meshes associated with a view
+var renderView = function(gl, projMat, modelViewMat, box, meshes, points) {
     gl.viewport(box.left, box.bottom, box.width, box.height);
     gl.scissor(box.left, box.bottom, box.width, box.height);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -263,18 +262,27 @@ var renderView = function(gl, projMat, modelViewMat, box, meshObj) {
         false,
         modelViewMat
     );
+    
+    for (let i = 0; i < meshes.length; i++) {
+        var meshObj = meshes[i];
+        if (meshObj.indicesNum == 0 && meshObj.vertsNum == 0) {
+            continue;
+        }
+        gl.bindBuffer(gl.ARRAY_BUFFER, meshObj.buffers.position);
+        gl.vertexAttribPointer(programInfo.attribLocations.position, 3, gl.FLOAT, gl.FALSE, 0, 0);
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, meshObj.buffers.position);
-    gl.vertexAttribPointer(programInfo.attribLocations.position, 3, gl.FLOAT, gl.FALSE, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, meshObj.buffers.normals);
+        gl.vertexAttribPointer(programInfo.attribLocations.normal, 3, gl.FLOAT, gl.FALSE, 0, 0);
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, meshObj.buffers.normals);
-    gl.vertexAttribPointer(programInfo.attribLocations.normal, 3, gl.FLOAT, gl.FALSE, 0, 0);
+        if (points) {
+            gl.drawElements(gl.POINTS, mesh.vertsNum, gl.UNSIGNED_INT, 0);
+        } else {
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, meshObj.buffers.indices); 
+            gl.drawElements(gl.TRIANGLES, mesh.indicesNum, gl.UNSIGNED_INT, 0);
+        }
+        
 
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, meshObj.buffers.indices); 
-      
-
-    gl.drawElements(gl.TRIANGLES, indicesNum, gl.UNSIGNED_INT, 0);
-
-    //gl.bindBuffer(gl.ARRAY_BUFFER, null);
-    //gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+        //gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        //gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+    }
 }

@@ -54,6 +54,7 @@ fn fragment_main(
     
     // extract the normal from the view-space orientation
     var N = -normalize(cross(dpdx(data.eye), dpdy(data.eye)));
+    // var N = vec3<f32>(.0,.0,.0);
 
     if (frontFacing) {
         diffuseColor = vec3<f32>(0.7, 0.2, 0.2);

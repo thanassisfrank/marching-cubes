@@ -5,15 +5,15 @@ export var get = (id) => {
 }
 
 export var isVisible = (elem) => {
-    return getComputedStyle(elem).visibility == "visible";
+    return getComputedStyle(elem).display != "none";
 }
 
 export var hide = (elem) => {
-    elem.style.visibility = "hidden";
+    elem.style.display = "none";
 }
 
 export var show = (elem) => {
-    elem.style.visibility = "visible";
+    elem.style.display = "initial";
 }
 
 export var getCtx = (canvas, type) => {

@@ -553,15 +553,13 @@ int triTable[256][15] = {
 };
 
 float* data;
+float* points;
 int dataLength;
 int sizeX;
 int sizeY;
 int sizeZ;
-int* codes;
-int codesCount;
 float* verts;
 int vertsNum;
-float* normals;
 int* indices;
 int indicesNum;
 
@@ -576,248 +574,18 @@ float* EMSCRIPTEN_KEEPALIVE assignDataLocation(int x, int y, int z) {
     return data;
 }
 
-float* EMSCRIPTEN_KEEPALIVE getVertsLocation() {
-    return verts;
+float* EMSCRIPTEN_KEEPALIVE assignPointsLocation(int x, int y, int z) {
+    pointsLength = x*y*z*3;
+    sizeX = x;
+    sizeY = y;
+    sizeZ = z;
+    points = malloc(pointsLength * sizeof(float));
+    return points;
 }
 
-float* EMSCRIPTEN_KEEPALIVE getNormalsLocation() {
-    return normals;
-}
+// load data into wasm module
 
-int* EMSCRIPTEN_KEEPALIVE getIndicesLocation() {
-    return indices;
-}
-
-int EMSCRIPTEN_KEEPALIVE getIndicesLength() {
-    return indicesNum;
-}
-
-
-
-/*
-int  EMSCRIPTEN_KEEPALIVE getCode(float* data, int length, float threshold) {
-    int code = 0;
-    for (int i = 0; i < 8; i++) {
-        float* c = vertCoordTable[i];
-        float val = ptr[4*(int)c[0] + 2*(int)c[1] + (int)c[2]];
-        code |= (val > threshold) << i;
-    }
-    return code;
-}
-
-int vertsNum = 0;
-
-float inter (float a, float b, float fac) {
-    return a*(1-fac) + b*fac;
-}
-*/
-/*
-void edgesToVerts(float* data, int* edges, float threshold, int x, int y, int z, float* free) {
-    int length = 0;
-    for (int i = 0; i < 12; i++) {
-        if (edges[i] != -1) {
-            const int* connected = edgeToVertsTable[edges[i]];
-            float* a = vertCoordTable[connected[0]];
-            float* b = vertCoordTable[connected[1]];
-            // get values at those cells
-            // CHANGE TO USE SIZE
-            float va = data[4*((int)a[0] + x) + 2*((int)a[1] + y) + (int)a[2] + z];
-            float vb = data[4*((int)b[0] + x) + 2*((int)b[1] + y) + (int)b[2] + z];;
-            float fac = (threshold-va)/(vb-va);
-            float vert[3] = {
-                inter(a[0], b[0], fac) + x,
-                inter(a[1], b[1], fac) + y,
-                inter(a[2], b[2], fac) + z,
-            };
-            free[3*i] = vert[0];
-            free[3*i + 1] = vert[1];
-            free[3*i + 2] = vert[2];
-            vertsNum += 1;
-        } else {
-            break;
-        }
-    }
-}
-*/
-
-float* getPointNorm(float* data, int i, int j, int k, int x, int y, int z) {
-    float cellSize[3] = {1, 1, 1};
-    float d[3];
-    float thisVal = data[y*z*i + z*j + k];
-    
-    // x(i) component
-    if (i > 0) {
-        if (i < x - 2){
-            d[0] = (data[y*z*(i+1) + z*j + k] - data[y*z*(i-1) + z*j + k])/(2*cellSize[0]);
-        } else {
-            d[0] = (thisVal - data[y*z*(i-1) + z*j + k])/cellSize[0];
-        }
-    } else {
-        d[0] = ((data[y*z*(i+1) + z*j + k] - thisVal)/(cellSize[0]));
-    }
-
-    // y(j) component
-    if (j > 0) {
-        if (j < y - 2){
-            d[1] = (data[y*z*i + z*(j+1) + k] - data[y*z*i + z*(j-1) + k])/(2*cellSize[1]);
-        } else {
-            d[1] = (thisVal - data[y*z*i + z*(j-1) + k])/cellSize[1];
-        }
-    } else {
-        d[1] = ((data[y*z*i + z*(j+1) + k] - thisVal)/(cellSize[1]));
-    }
-
-    // z(k) component
-    if (k > 0) {
-        if (k < z - 2){
-            d[2] = (data[y*z*i + z*j + k+1] - data[y*z*i + z*j + k-1])/(2*cellSize[2]);
-        } else {
-            d[2] = (thisVal - data[y*z*i + z*j + k-1])/cellSize[2];
-        }
-    } else {
-        d[2] = ((data[y*z*i + z*j + k+1] - thisVal)/(cellSize[2]));
-    }
-
-    return d;
-
-}
-
-float getPointNormX(float* data, int i, int j, int k, int x, int y, int z) {
-    float cellSize[3] = {1, 1, 1};
-    float thisVal = data[y*z*i + z*j + k];
-    
-    // x(i) component
-    if (i > 0) {
-        if (i < x - 2){
-            return (data[y*z*(i+1) + z*j + k] - data[y*z*(i-1) + z*j + k])/(2*cellSize[0]);
-        } else {
-            return (thisVal - data[y*z*(i-1) + z*j + k])/cellSize[0];
-        }
-    } else {
-        return ((data[y*z*(i+1) + z*j + k] - thisVal)/(cellSize[0]));
-    }
-}
-float getPointNormY(float* data, int i, int j, int k, int x, int y, int z) {
-    float cellSize[3] = {1, 1, 1};
-    float thisVal = data[y*z*i + z*j + k];
-    
-    // y(j) component
-    if (j > 0) {
-        if (j < y - 2){
-            return (data[y*z*i + z*(j+1) + k] - data[y*z*i + z*(j-1) + k])/(2*cellSize[1]);
-        } else {
-            return (thisVal - data[y*z*i + z*(j-1) + k])/cellSize[1];
-        }
-    } else {
-        return ((data[y*z*i + z*(j+1) + k] - thisVal)/(cellSize[1]));
-    }
-}
-float getPointNormZ(float* data, int i, int j, int k, int x, int y, int z) {
-    float cellSize[3] = {1, 1, 1};
-    float thisVal = data[y*z*i + z*j + k];
-
-    // z(k) component
-    if (k > 0) {
-        if (k < z - 2){
-            return (data[y*z*i + z*j + k+1] - data[y*z*i + z*j + k-1])/(2*cellSize[2]);
-        } else {
-            return (thisVal - data[y*z*i + z*j + k-1])/cellSize[2];
-        }
-    } else {
-        return ((data[y*z*i + z*j + k+1] - thisVal)/(cellSize[2]));
-    }
-}
-
-// x, y, z are coords of point, X, Y, Z are the dimensions of the data
-void addVertsAndNorms(float* verts, float* normals, int* curr, int code, int x, int y, int z, float* data, int X, int Y, int Z, float threshold) {
-    int* edges = edgeTable[code];
-    for (int i = 0; i < 12; i++) {
-        if (edges[i] != -1) {
-            // add vertex position to vertex list
-            int connected[2] = {
-                edgeToVertsTable[edges[i]][0],
-                edgeToVertsTable[edges[i]][1],
-            };
-
-            int a[3] = {
-                vertCoordTable[connected[0]][0],
-                vertCoordTable[connected[0]][1],
-                vertCoordTable[connected[0]][2]
-            };
-            int b[3] = {
-                vertCoordTable[connected[1]][0],
-                vertCoordTable[connected[1]][1],
-                vertCoordTable[connected[1]][2]
-            };
-
-            float va = data[Y*Z*(a[0] + x) + Z*(a[1] + y) + a[2] + z];
-            float vb = data[Y*Z*(b[0] + x) + Z*(b[1] + y) + b[2] + z];
-            
-            float fac = (threshold-va)/(vb-va);
-
-            verts[3*(*curr)] = (float)a[0]*(1-fac) + (float)b[0]*fac + (float)x;
-            verts[3*(*curr) + 1] = (float)a[1]*(1-fac) + (float)b[1]*fac + (float)y;
-            verts[3*(*curr) + 2] = (float)a[2]*(1-fac) + (float)b[2]*fac + (float)z;
-
-            // add vertex normal to normal list
-
-            vert da = {
-                getPointNormX(data, (a[0] + x), (a[1] + y), a[2] + z, X, Y, Z),
-                getPointNormY(data, (a[0] + x), (a[1] + y), a[2] + z, X, Y, Z),
-                getPointNormZ(data, (a[0] + x), (a[1] + y), a[2] + z, X, Y, Z)
-            };
-            vert db = {
-                getPointNormX(data, (b[0] + x), (b[1] + y), b[2] + z, X, Y, Z),
-                getPointNormY(data, (b[0] + x), (b[1] + y), b[2] + z, X, Y, Z),
-                getPointNormZ(data, (b[0] + x), (b[1] + y), b[2] + z, X, Y, Z)
-            };
-
-            normals[3*(*curr)] = da[0]*(1-fac) + db[0]*fac;
-            normals[3*(*curr) + 1] = da[1]*(1-fac) + db[1]*fac;
-            normals[3*(*curr) + 2] = da[2]*(1-fac) + db[2]*fac;
-
-            (*curr)++;
-        } else {
-            break;
-        }
-    }
-}
-
-void addIndices(int* indices, int* currInd, int currVert, int code) { 
-    int* tri = triTable[code];
-    for (int i = 0; i < 15; i++) {
-        if (tri[i] != -1) {
-            indices[*currInd + i] = tri[i] + currVert;
-        } else {
-            *currInd += i;
-            break;
-        }
-    }
-}
-
-void getCodes(float threshold) {
-    int index;
-    int X = sizeX-1;
-    int Y = sizeY-1;
-    int Z = sizeZ-1;
-    codesCount = X*Y*Z;
-    for (int i = 0; i < X; i++) {
-        for (int j = 0; j < Y; j++) {
-            for (int k = 0; k < Z; k++) {
-                codes[Y * Z * i + Z * j + k] = 0;
-                for (int l = 0; l < 8; l++) {
-                    int* c = vertCoordTable[l];
-                    // indexing data needs full dimensions
-                    index = sizeY * sizeZ * (i + c[0]) + sizeZ * (j + c[1]) + k + c[2];
-                    float val = data[index];
-                    // indexing codes uses X Y Z (dim - 1)
-                    codes[Y * Z * i + Z * j + k] |= (val > threshold) << l;
-                }
-            }
-        }
-    }
-}
-
+// enumeration to see how many verts/indicies are generated
 int getVertsCount() {
     int total = 0;
     for (int i = 0; i < codesCount; i++) {
@@ -848,14 +616,80 @@ int getIndicesCount() {
     return total;
 }
 
+// get the positions of the verts for a cell
+void addVerts(
+    float* verts, 
+    float* normals, 
+    int* curr, 
+    int code, 
+    int x, 
+    int y, 
+    int z, 
+    float* data, 
+    float* points,
+    int X, 
+    int Y, 
+    int Z, 
+    float threshold, 
+    bool pointsBool
+) {
+    int* edges = edgeTable[code];
+    for (int i = 0; i < 12; i++) {
+        if (edges[i] != -1) {
+            // add vertex position to vertex list
+            int connected[2] = {
+                edgeToVertsTable[edges[i]][0],
+                edgeToVertsTable[edges[i]][1],
+            };
 
-// ptr is where the data starts in memory, x, y, z are the sizes
-int EMSCRIPTEN_KEEPALIVE generateMesh(float threshold) {
-    // potentially could reduce space allocated to codes as they are per cell not per point
-    int codesCount = (sizeX - 1) * (sizeY - 1) * (sizeZ - 1);  
-    codes = (int*) malloc(codesCount * sizeof(int));
-    getCodes(threshold);
+            int a[3] = {
+                vertCoordTable[connected[0]][0],
+                vertCoordTable[connected[0]][1],
+                vertCoordTable[connected[0]][2]
+            };
+            int b[3] = {
+                vertCoordTable[connected[1]][0],
+                vertCoordTable[connected[1]][1],
+                vertCoordTable[connected[1]][2]
+            };
 
+            int aInd = Y*Z*(a[0] + x) + Z*(a[1] + y) + a[2] + z;
+            int bInd = Y*Z*(b[0] + x) + Z*(b[1] + y) + b[2] + z
+            // the values at the endpoints of the edge
+            float va = data[aInd];
+            float vb = data[bInd];
+            
+            float fac = (threshold-va)/(vb-va);
+
+            if (points == true) {
+                // if the points are defined explicitly
+                float pa[3] = {
+                    points[3*aInd + 0],
+                    points[3*aInd + 1],
+                    points[3*aInd + 2]
+                };
+                float pb[3] = {
+                    points[3*bInd + 0],
+                    points[3*bInd + 1],
+                    points[3*bInd + 2]
+                };
+                verts[3*(*curr) + 0] = pa[0]*(1-fac) + pb[0]*fac;
+                verts[3*(*curr) + 1] = pa[1]*(1-fac) + pb[1]*fac;
+                verts[3*(*curr) + 2] = pa[2]*(1-fac) + pb[2]*fac;
+            } else {
+                verts[3*(*curr) + 0] = (float)a[0]*(1-fac) + (float)b[0]*fac + (float)x;
+                verts[3*(*curr) + 1] = (float)a[1]*(1-fac) + (float)b[1]*fac + (float)y;
+                verts[3*(*curr) + 2] = (float)a[2]*(1-fac) + (float)b[2]*fac + (float)z;
+            }
+            (*curr)++;
+        } else {
+            break;
+        }
+    }
+}
+
+// extract isosurface 
+int EMSCRIPTEN_KEEPALIVE generateMesh(float threshold, bool pointsBool) {
     vertsNum = getVertsCount();
     verts = (float*) malloc(vertsNum * 3 * sizeof(float));
     
@@ -875,13 +709,21 @@ int EMSCRIPTEN_KEEPALIVE generateMesh(float threshold) {
     for (int i = 0; i < X; i++) {
         for (int j = 0; j < Y; j++) {
             for (int k = 0; k < Z; k++) {
-                codeIndex = Y * Z * i + Z * j + k;
-                // loop throught all generated codes
-                if (codes[codeIndex] == 0 || codes[codeIndex] == 255) {
+                // calculate code for this cell
+                int code = 0;
+                for (int l = 0; l < 8; l++) {
+                    int* c = vertCoordTable[l];
+                    // indexing data needs full dimensions
+                    index = sizeY * sizeZ * (i + c[0]) + sizeZ * (j + c[1]) + k + c[2];
+                    float val = data[index];
+                    // indexing codes uses X Y Z (dim - 1)
+                    code |= (val > threshold) << l;
+                }
+                if (code == 0 || code == 255) {
                     continue;
                 }
-                addIndices(indices, &currInd, currVert, codes[codeIndex]);
-                addVertsAndNorms(verts, normals, &currVert, codes[codeIndex], i, j, k, data, sizeX, sizeY, sizeZ, threshold);
+                addIndices(indices, &currInd, currVert, code);
+                addVerts(verts, normals, &currVert, codes[codeIndex], i, j, k, data, points, sizeX, sizeY, sizeZ, threshold, pointsBool);
                 // calculate indices values
             }
         }
@@ -889,9 +731,9 @@ int EMSCRIPTEN_KEEPALIVE generateMesh(float threshold) {
     return vertsNum;
 }
 
+
+// free the memory used for this isosurface
 void EMSCRIPTEN_KEEPALIVE freeMem () {
-    free(codes);
     free(verts);
-    free(normals);
     free(indices);
 }

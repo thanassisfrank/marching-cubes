@@ -82,16 +82,29 @@ async function main() {
     var camera1 = cameraManager.createCamera();
     var mesh1 = meshManager.createMesh();
 
-    var data1 = await dataManager.createData({...datasets.bluntfin_simple, accessType:"whole"});
+    var data1 = await dataManager.createData({...datasets.bluntfin_simple_comb, accessType:"complex"});
+    console.log(data1);
 
-    await setupMarch(data1);
+    if (data1.multiBlock) {
+        console.log("doing multi")
+        var results = [];
+        for (let i = 0; i < data1.pieces.length; i++) {
+            results.push(setupMarch(data1.pieces[i]));
+        }
+        await Promise.all(results);
+        
+    } else {
+        await setupMarch(data1);
+    }
+    
 
+    //console.log(data1.maxSize);
     camera1.setDist(1.2*data1.maxSize);
 
     var view1 = viewManager.createView({
         camera: camera1,
         data: data1,
-        mesh: mesh1,
+        meshes: [meshManager.createMesh(), meshManager.createMesh()],
         renderMode: renderModes.ISO_SURFACE
     });
 

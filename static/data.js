@@ -18,6 +18,9 @@ const blockSize = [4, 4, 4]
 // - from a file (complex)
 //   a dataset name is specified and a coars global set of data is loaded on creation
 //   when marching, a finer set of data for the threshold region can be requested
+// - from a VTS file
+//   structured grid is specified
+//   if the file is multiblock, a separate data object will be stored for each
 
 var dataManager = {
     datas: {},
@@ -77,6 +80,9 @@ var dataManager = {
         this.dataName = "";
         // used by the .vts format to place points in space
         this.points = [];
+        // will contain new instances of data objects
+        this.pieces = [];
+        this.multiBlock = false;
         // used to store the limit values of each block if in complex mode
         this.blockLimits = [];
         // used to store fine data for complex mode
@@ -99,7 +105,7 @@ var dataManager = {
         this.maxSize = 0;
         this.maxCellSize = 0;
         this.volume = 0;
-        this.midPoint = [];
+        this.midPoint = [0, 0, 0];
         this.size = [];
         this.cellSize = [1, 1, 1];
 
@@ -136,22 +142,56 @@ var dataManager = {
             this.initialised = true;
             console.log("initialised");
         }
-        this.initialiseVTS = function(x, y, z,) {
-            this.normalsInitialised = false;
-            this.normalsPopulated = false;
-            this.volume = x * y * z; // total number of points
-            this.size = [x, y, z]; // in points
-            this.maxCellSize = 1; // so camera initialises properly
-            this.cellsCount = (x-1)*(y-1)*(z-1);
+        this.initialiseVTS = function(fileDOM) {
+            const numPieces = getNumPiecesFromVTS(fileDOM)
+            for (let i = 0; i < numPieces; i++) {
+                var p;
+                if (numPieces == 1) {
+                    p = this;
+                } else {
+                    var p = this.pieces[i];
+                }
+                const [x, y, z] = getExtentFromVTS(fileDOM, i);
+                // get the limtis for the dataset
+                p.limits = getDataLimitsFromVTS(fileDOM, i, getDataNamesFromVTS(fileDOM, i)[0]);
+                console.log(p.limits);
+                if (!this.limits[0] || p.limits[0] < this.limits[0]) this.limits[0] = p.limits[0];
+                if (!this.limits[1] || p.limits[1] > this.limits[1]) this.limits[1] = p.limits[1];
+                
+                p.normalsInitialised = false;
+                p.normalsPopulated = false;
+                p.volume = x * y * z; // total number of points
 
-            // get two points on opposit corners
-            const p0 = [this.points[0], this.points[1], this.points[2]]
-            const p1 = [this.points[this.cellsCount], this.points[this.cellsCount+1], this.points[this.cellsCount+2]]
+                p.size = [x, y, z]; // in points
+                p.maxCellSize = 1; // so camera initialises properly
+                p.cellsCount = (x-1)*(y-1)*(z-1);
 
-            this.maxSize = VecMath.magnitude(VecMath.vecMinus(p0, p1));
-            this.midPoint = VecMath.scalMult(0.5, VecMath.vecAdd(p0, p1));
+                // get two points on opposit corners
+                const p0 = [
+                    p.points[0], 
+                    p.points[1], 
+                    p.points[2]
+                ]
+                const p1 = [
+                    p.points[p.cellsCount*3], 
+                    p.points[p.cellsCount*3+1], 
+                    p.points[p.cellsCount*3+2]]
+
+                p.maxSize = VecMath.magnitude(VecMath.vecMinus(p0, p1));
+                p.midPoint = VecMath.scalMult(0.5, VecMath.vecAdd(p0, p1));
+
+                if (numPieces > 1) {
+                    this.volume += p.volume;
+                    this.maxSize += p.maxSize;
+                    this.midPoint = VecMath.vecAdd(this.midPoint, p.midPoint);
+                }
+
+                p.initialised = true;
+            }
+
+            this.midPoint = VecMath.scalMult(1/numPieces, this.midPoint);
             
-            
+            this.maxCellSize = 1;
             this.initialised = true;
             console.log("initialised");
         }
@@ -220,15 +260,28 @@ var dataManager = {
             return fetch(src)
                 .then(res => res.text())
                 .then(text => parseXML(text))
-                .then((fileDOM) => {
-                    that.points = getPointsFromVTS(fileDOM, 0);
-                    // get the first dataset
-                    var pointDataNames = getDataNamesFromVTS(fileDOM, 0);
-                    this.data = getPointDataFromVTS(fileDOM, 0, pointDataNames[0]);
-                    // get the limtis for the dataset
-                    this.limits = getDataLimitsFromVTS(fileDOM, 0, pointDataNames[0]);
-                    console.log(this.limits);
-                    that.initialiseVTS(...getExtentFromVTS(fileDOM, 0));
+                .then(async function(fileDOM) {
+                    const numPieces = getNumPiecesFromVTS(fileDOM);
+                    console.log(numPieces)
+                    for (let i = 0; i < numPieces; i++) {
+                        var p;
+                        if (numPieces == 1) {
+                            p = that;
+                        } else {
+                            that.pieces[i] = await dataManager.createData({});
+                            that.pieces[i].structuredGrid = true;
+                            var p = that.pieces[i];
+                            that.multiBlock = true;
+                        }
+                        
+                        p.points = getPointsFromVTS(fileDOM, i);
+                        // get the first dataset
+                        var pointDataNames = getDataNamesFromVTS(fileDOM, i);
+                        p.data = getPointDataFromVTS(fileDOM, i, pointDataNames[0]);
+                    }
+                    
+                    that.initialiseVTS(fileDOM);
+                    console.log(that)
                 });
         }
         this.setCellSize = function(size) {

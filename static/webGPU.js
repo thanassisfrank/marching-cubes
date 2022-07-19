@@ -1339,6 +1339,7 @@ function createMarchReadBuffers(vertNum, indexNum) {
 }
 
 function createOffsetBindGroups(dataObj) {
+    //console.log(dataObj);
     const WGCount = dataObj.marchData.WGCount;
     const offsetBufferLength = Math.ceil(WGCount.val/(WGPrefixSumCount*2)) * WGPrefixSumCount*2;
     //console.log("WGCount: "+ WGCount.val);
@@ -1611,17 +1612,18 @@ async function march(dataObj, meshObj, threshold) {
     // marching pass =====================================================================
 
     meshObj.indicesNum = indNum;
-    meshObj.vertNum = vertNum;
+    //meshObj.vertNum = vertNum;
+    meshObj.vertsNum = vertNum;
     console.log(vertNum, indNum);
 
-    if (vertNum == 0 || indNum == 0) {
+    // if (vertNum == 0 || indNum == 0) {
         
-        meshObj.verts = new Float32Array();
-        meshObj.normals = new Float32Array();
-        meshObj.indices = new Float32Array();
-        console.log("no verts")
-        return;
-    }
+    //     meshObj.verts = new Float32Array();
+    //     meshObj.normals = new Float32Array();
+    //     meshObj.indices = new Float32Array();
+    //     console.log("no verts")
+    //     return;
+    // }
 
     deleteBuffers(meshObj);
 
@@ -2024,13 +2026,13 @@ async function marchFine(dataObj, meshObj, threshold) {
 
     // march pass =====================================================================================
     meshObj.indicesNum = indNum;
-    meshObj.vertNum = vertNum;
+    meshObj.vertsNum = vertNum;
 
     if (vertNum == 0 || indNum == 0) {
         meshObj.verts = new Float32Array();
         meshObj.normals = new Float32Array();
         meshObj.indices = new Float32Array();
-        console.log("yo, no verts")
+        console.log("no verts")
         return;
     }
     deleteBuffers(meshObj);
@@ -2386,16 +2388,8 @@ async function clearScreen(ctx) {
     depthStencilTexture.destroy();
 };
 
-async function renderView(ctx, projMat, modelViewMat, box, meshObj, points) {
-    if (meshObj.indicesNum == 0 && meshObj.vertsNum == 0) {
-        clearScreen(ctx);
-        return;
-    }
-
-    var commandEncoder = device.createCommandEncoder();
-    // provide details of load and store part of pass
-    // here there is one color output that will be cleared on load
-
+async function renderView(ctx, projMat, modelViewMat, box, meshes, points) {
+    // make a common depthe texture for the view frame
     var depthStencilTexture = device.createTexture({
         size: {
           width: ctx.canvas.width,
@@ -2406,62 +2400,88 @@ async function renderView(ctx, projMat, modelViewMat, box, meshObj, points) {
         format: 'depth32float',
         usage: GPUTextureUsage.RENDER_ATTACHMENT
     });
+    for (let i = 0; i < meshes.length; i++) {
+        var meshObj = meshes[i];
+        if (meshObj.indicesNum == 0 && meshObj.vertsNum == 0) {
+            continue;
+        }
 
-    const renderPassDescriptor = {
-        colorAttachments: [{
-            clearValue: clearColor,
-            loadOp: "clear",
-            storeOp: "store",
-            view: ctx.getCurrentTexture().createView()
-        }],
-        depthStencilAttachment: {
-            depthClearValue: 1.0,
-            depthLoadOp: "clear",
-            depthStoreOp: 'discard',
-            // stencilClearValue: 0,
-            // stencilLoadOp: "clear",
-            // stencilStoreOp: 'store',
-            view: depthStencilTexture.createView()
-          }
-    };
+        var commandEncoder = device.createCommandEncoder();
+        // provide details of load and store part of pass
+        // here there is one color output that will be cleared on load
 
-    // write uniforms to buffer
-    device.queue.writeBuffer(uniformBuffer, 0, new Float32Array([...projMat, ...modelViewMat]))
-
-    await commandEncoder;
-    
-    const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-
-    // for now, only draw a view if it is fully inside the canvas
-    if (box.right >= 0 && box.bottom >= 0 && box.left >= 0 && box.top >= 0) {
-        // will support rect outside the attachment size for V1 of webgpu
-        // https://github.com/gpuweb/gpuweb/issues/373 
-        passEncoder.setViewport(box.left, box.top, box.width, box.height, 0, 1);
-        // clamp to be inside the canvas
-        clampBox(box, ctx.canvas.getBoundingClientRect());
-        passEncoder.setScissorRect(box.left, box.top, box.width, box.height);
-
-        if (points) {
-            console.log("a")
-            passEncoder.setPipeline(pointsRenderPipeline);
-            passEncoder.setVertexBuffer(0, meshObj.buffers.vertex);
-            passEncoder.setVertexBuffer(1, meshObj.buffers.normal);
-            passEncoder.setBindGroup(0, pointsBindGroup);
-            passEncoder.draw(meshObj.vertsNum);
+        var renderPassDescriptor;
+        if (i == 0) {
+            // for first mesh, need to clear the colour and depth images
+            renderPassDescriptor = {
+                colorAttachments: [{
+                    clearValue: clearColor,
+                    loadOp: "load",
+                    storeOp: "store",
+                    view: ctx.getCurrentTexture().createView()
+                }],
+                depthStencilAttachment: {
+                    depthClearValue: 1.0,
+                    depthLoadOp: "clear",
+                    depthStoreOp: "store",
+                    view: depthStencilTexture.createView()
+                }
+            };
         } else {
-            passEncoder.setPipeline(meshRenderPipeline);
-            passEncoder.setIndexBuffer(meshObj.buffers.index, "uint32");
-            passEncoder.setVertexBuffer(0, meshObj.buffers.vertex);
-            passEncoder.setVertexBuffer(1, meshObj.buffers.normal);
-            passEncoder.setBindGroup(0, meshBindGroup);
-            passEncoder.drawIndexed(meshObj.indicesNum);
+            renderPassDescriptor = {
+                colorAttachments: [{
+                    clearValue: clearColor,
+                    loadOp: "load",
+                    storeOp: "store",
+                    view: ctx.getCurrentTexture().createView()
+                }],
+                depthStencilAttachment: {
+                    depthClearValue: 1.0,
+                    depthLoadOp: "load",
+                    depthStoreOp: "discard",
+                    view: depthStencilTexture.createView()
+                }
+            };
         }
         
-    }
-    
-    passEncoder.end();
 
-    device.queue.submit([commandEncoder.finish()]);
+        // write uniforms to buffer
+        device.queue.writeBuffer(uniformBuffer, 0, new Float32Array([...projMat, ...modelViewMat]))
+
+        await commandEncoder;
+        
+        const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
+
+        // for now, only draw a view if it is fully inside the canvas
+        if (box.right >= 0 && box.bottom >= 0 && box.left >= 0 && box.top >= 0) {
+            // will support rect outside the attachment size for V1 of webgpu
+            // https://github.com/gpuweb/gpuweb/issues/373 
+            passEncoder.setViewport(box.left, box.top, box.width, box.height, 0, 1);
+            // clamp to be inside the canvas
+            clampBox(box, ctx.canvas.getBoundingClientRect());
+            passEncoder.setScissorRect(box.left, box.top, box.width, box.height);
+
+            if (points) {
+                passEncoder.setPipeline(pointsRenderPipeline);
+                passEncoder.setVertexBuffer(0, meshObj.buffers.vertex);
+                passEncoder.setVertexBuffer(1, meshObj.buffers.normal);
+                passEncoder.setBindGroup(0, pointsBindGroup);
+                passEncoder.draw(meshObj.vertsNum);
+            } else {
+                passEncoder.setPipeline(meshRenderPipeline);
+                passEncoder.setIndexBuffer(meshObj.buffers.index, "uint32");
+                passEncoder.setVertexBuffer(0, meshObj.buffers.vertex);
+                passEncoder.setVertexBuffer(1, meshObj.buffers.normal);
+                passEncoder.setBindGroup(0, meshBindGroup);
+                passEncoder.drawIndexed(meshObj.indicesNum);
+            }
+            
+        }
+        
+        passEncoder.end();
+
+        device.queue.submit([commandEncoder.finish()]);
+    }
 
     depthStencilTexture.destroy();
     //console.log("rendered")

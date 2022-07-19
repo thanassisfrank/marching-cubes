@@ -250,12 +250,17 @@
         "contentType": "text/plain"
     },
     {
-        "path": "data/multicomb_0_simple.vts",
+        "path": "data/multicomb_simple.vts",
         "encoding": "utf8",
         "contentType": "text/plain"
     },
     {
         "path": "data/bluntfin_simple.vts",
+        "encoding": "utf8",
+        "contentType": "text/plain"
+    },
+    {
+        "path": "data/bluntfin_simple_comb.vts",
         "encoding": "utf8",
         "contentType": "text/plain"
     },

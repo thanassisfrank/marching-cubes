@@ -95,9 +95,9 @@
         },
         "dataType": "float32"
     },
-    "multicomb_0_simple": {
-        "name": "Multicomb_0",
-        "path": "data/multicomb_0_simple.vts",
+    "multicomb_simple": {
+        "name": "Multicomb",
+        "path": "data/multicomb_simple.vts",
         "type": "structuredGrid",
         "size": {
             "x": 15,
@@ -106,9 +106,9 @@
         },
         "dataType": "float32"
     },
-    "bluntfin_simple": {
+    "bluntfin_simple_comb": {
         "name": "Blunt fin",
-        "path": "data/bluntfin_simple.vts",
+        "path": "data/bluntfin_simple_comb.vts",
         "type": "structuredGrid",
         "size": {
             "x": 31,
