@@ -5,18 +5,20 @@ import * as gpu from "./webGPU.js";
 import * as gl from "./webgl.js";
 import {module as marchModule} from "./march.js";
 
-export {setRenderModule, setupRenderer, createBuffers, buffersUpdateNeeded, updateMeshBuffers, renderView, renderPoints, deleteBuffers, clearScreen, resizeRenderingContext};
+export {autoSetRenderModule, setRenderModule, setupRenderer, createBuffers, buffersUpdateNeeded, updateMeshBuffers, renderView, renderPoints, deleteBuffers, clearScreen, resizeRenderingContext};
 
 var module;
 
-if (navigator.gpu) {
-    // use webGPU
-    module = "gpu";
-    console.log("webgpu is supported")
-} else {
-    // use webgl
-    module = "gl";
-    console.log("webgpu is not supported, using webgl")
+function autoSetRenderModule() {
+    if (navigator.gpu) {
+        // use webGPU
+        module = "gpu";
+        console.log("webgpu is supported")
+    } else {
+        // use webgl
+        module = "gl";
+        console.log("webgpu is not supported, using webgl")
+    }
 }
 
 function setRenderModule(thisModule) {
@@ -42,7 +44,7 @@ function createBuffers(...args) {
 }
 
 function buffersUpdateNeeded(...args) {
-    return module == "gpu" && marchModule != "gpu"
+    return !(module == "gpu" && marchModule == "gpu")
 }
 
 function updateMeshBuffers(...args) {

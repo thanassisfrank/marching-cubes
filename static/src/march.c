@@ -4,6 +4,8 @@
 //memory loaded with tables in order vertCoordTable, edgeTable, edgeToVertsTable, triTable
 
 typedef float vert[3];
+typedef int bool; 
+enum {false = 0, true = 1};
 
 extern void console_log(float);
 extern void console_log_bin(int);
@@ -553,8 +555,12 @@ int triTable[256][15] = {
 };
 
 float* data;
-float* points;
 int dataLength;
+float* points;
+int pointsLength;
+int* codes;
+int codesCount;
+
 int sizeX;
 int sizeY;
 int sizeZ;
@@ -566,6 +572,7 @@ int indicesNum;
 
 // data length is the number of dataPoints
 float* EMSCRIPTEN_KEEPALIVE assignDataLocation(int x, int y, int z) {
+    //console_log(6421);
     dataLength = x*y*z;
     sizeX = x;
     sizeY = y;
@@ -575,18 +582,58 @@ float* EMSCRIPTEN_KEEPALIVE assignDataLocation(int x, int y, int z) {
 }
 
 float* EMSCRIPTEN_KEEPALIVE assignPointsLocation(int x, int y, int z) {
-    pointsLength = x*y*z*3;
-    sizeX = x;
-    sizeY = y;
-    sizeZ = z;
-    points = malloc(pointsLength * sizeof(float));
+    pointsLength = x*y*z;
+    points = malloc(pointsLength * 3 * sizeof(float));
     return points;
 }
 
-// load data into wasm module
+// calculate the codes
+void calculateCodes(float threshold) {
+    int index;
+    //console_log((float)dataLength);
+    int X = sizeX - 1;
+    int Y = sizeY - 1;
+    int Z = sizeZ - 1;
+    codesCount = X*Y*Z;
+    int count = 0;
+    bool shown = false;
+    //console_log(sizeX);
+    for (int i = 0; i < X; i++) {
+        for (int j = 0; j < Y; j++) {
+            for (int k = 0; k < Z; k++) {
+                codes[Y * Z * i + Z * j + k] = 0;
+                for (int l = 0; l < 8; l++) {
+                    
+                    int* c = vertCoordTable[l];
+                    // indexing data needs full dimensions
+                    index = sizeY * sizeZ * (i + c[0]) + sizeZ * (j + c[1]) + k + c[2];
+                    float val = data[index];
+                    // indexing codes uses X Y Z (dim - 1)
+                    codes[Y * Z * i + Z * j + k] |= (val > threshold) << l;
+
+                    count++;
+                    // if (sizeX == 0 && shown == false) {
+                    //     shown = true;
+                    //     console_log(count);
+                    //     console_log((float)(Y * Z * i + Z * j + k));
+                    // }
+                }
+            }
+        }
+    }
+    //console_log(sizeX);
+}
+
+float* EMSCRIPTEN_KEEPALIVE getVertsLocation() {
+    return verts;
+}
+
+int* EMSCRIPTEN_KEEPALIVE getIndicesLocation() {
+    return indices;
+}
 
 // enumeration to see how many verts/indicies are generated
-int getVertsCount() {
+int EMSCRIPTEN_KEEPALIVE getVertsCount() {
     int total = 0;
     for (int i = 0; i < codesCount; i++) {
         // loop through each code
@@ -601,7 +648,7 @@ int getVertsCount() {
     return total;
 }
 
-int getIndicesCount() {
+int EMSCRIPTEN_KEEPALIVE getIndicesCount() {
     int total = 0;
     for (int i = 0; i < codesCount; i++) {
         // loop through each code
@@ -616,10 +663,21 @@ int getIndicesCount() {
     return total;
 }
 
+void EMSCRIPTEN_KEEPALIVE addIndices(int* indices, int* currInd, int currVert, int code) { 
+    int* tri = triTable[code];
+    for (int i = 0; i < 15; i++) {
+        if (tri[i] != -1) {
+            indices[*currInd + i] = tri[i] + currVert;
+        } else {
+            *currInd += i;
+            break;
+        }
+    }
+}
+
 // get the positions of the verts for a cell
-void addVerts(
-    float* verts, 
-    float* normals, 
+void EMSCRIPTEN_KEEPALIVE addVerts(
+    float* verts,
     int* curr, 
     int code, 
     int x, 
@@ -654,14 +712,14 @@ void addVerts(
             };
 
             int aInd = Y*Z*(a[0] + x) + Z*(a[1] + y) + a[2] + z;
-            int bInd = Y*Z*(b[0] + x) + Z*(b[1] + y) + b[2] + z
+            int bInd = Y*Z*(b[0] + x) + Z*(b[1] + y) + b[2] + z;
             // the values at the endpoints of the edge
             float va = data[aInd];
             float vb = data[bInd];
             
             float fac = (threshold-va)/(vb-va);
 
-            if (points == true) {
+            if (pointsBool == true) {
                 // if the points are defined explicitly
                 float pa[3] = {
                     points[3*aInd + 0],
@@ -673,14 +731,15 @@ void addVerts(
                     points[3*bInd + 1],
                     points[3*bInd + 2]
                 };
-                verts[3*(*curr) + 0] = pa[0]*(1-fac) + pb[0]*fac;
-                verts[3*(*curr) + 1] = pa[1]*(1-fac) + pb[1]*fac;
-                verts[3*(*curr) + 2] = pa[2]*(1-fac) + pb[2]*fac;
+                verts[3*(*curr) + 0] = pa[0]*(1.0-fac) + pb[0]*fac;
+                verts[3*(*curr) + 1] = pa[1]*(1.0-fac) + pb[1]*fac;
+                verts[3*(*curr) + 2] = pa[2]*(1.0-fac) + pb[2]*fac;
             } else {
                 verts[3*(*curr) + 0] = (float)a[0]*(1-fac) + (float)b[0]*fac + (float)x;
                 verts[3*(*curr) + 1] = (float)a[1]*(1-fac) + (float)b[1]*fac + (float)y;
                 verts[3*(*curr) + 2] = (float)a[2]*(1-fac) + (float)b[2]*fac + (float)z;
             }
+
             (*curr)++;
         } else {
             break;
@@ -690,13 +749,17 @@ void addVerts(
 
 // extract isosurface 
 int EMSCRIPTEN_KEEPALIVE generateMesh(float threshold, bool pointsBool) {
+    //console_log(123);
+    int codesCount = (sizeX - 1) * (sizeY - 1) * (sizeZ - 1);  
+    codes = (int*) malloc(codesCount * sizeof(int));
+    calculateCodes(threshold);
+
+    //console_log(1234);
     vertsNum = getVertsCount();
     verts = (float*) malloc(vertsNum * 3 * sizeof(float));
     
     indicesNum = getIndicesCount();
     indices = (int*) malloc(indicesNum * sizeof(int));
-
-    normals = (float*) malloc(vertsNum * 3 * sizeof(float));
     
     int X = sizeX-1;
     int Y = sizeY-1;
@@ -706,34 +769,30 @@ int EMSCRIPTEN_KEEPALIVE generateMesh(float threshold, bool pointsBool) {
     int currInd = 0;
     int codeIndex = 0;
 
+    console_log_bin(pointsBool);
+
     for (int i = 0; i < X; i++) {
         for (int j = 0; j < Y; j++) {
             for (int k = 0; k < Z; k++) {
-                // calculate code for this cell
-                int code = 0;
-                for (int l = 0; l < 8; l++) {
-                    int* c = vertCoordTable[l];
-                    // indexing data needs full dimensions
-                    index = sizeY * sizeZ * (i + c[0]) + sizeZ * (j + c[1]) + k + c[2];
-                    float val = data[index];
-                    // indexing codes uses X Y Z (dim - 1)
-                    code |= (val > threshold) << l;
-                }
-                if (code == 0 || code == 255) {
+                codeIndex = Y * Z * i + Z * j + k;
+                // loop throught all generated codes
+                if (codes[codeIndex] == 0 || codes[codeIndex] == 255) {
                     continue;
                 }
-                addIndices(indices, &currInd, currVert, code);
-                addVerts(verts, normals, &currVert, codes[codeIndex], i, j, k, data, points, sizeX, sizeY, sizeZ, threshold, pointsBool);
+                addIndices(indices, &currInd, currVert, codes[codeIndex]);
+                addVerts(verts, &currVert, codes[codeIndex], i, j, k, data, points, sizeX, sizeY, sizeZ, threshold, pointsBool);
                 // calculate indices values
             }
         }
     }
+    //console_log(12345);
     return vertsNum;
 }
 
 
 // free the memory used for this isosurface
 void EMSCRIPTEN_KEEPALIVE freeMem () {
+    free(codes);
     free(verts);
     free(indices);
 }

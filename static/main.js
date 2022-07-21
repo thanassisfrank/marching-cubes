@@ -8,11 +8,13 @@ import { meshManager } from "./mesh.js";
 import { viewManager, renderModes } from "./view.js";
 import { decompressB64Str, getNumPiecesFromVTS, getDataNamesFromVTS, getPointsFromVTS, getExtentFromVTS } from "./dataUnpacker.js";
 
-import {setRenderModule, setupRenderer, resizeRenderingContext} from "./render.js";
-import {setupMarchModule, setMarchModule, setupMarch} from "./march.js";
+import {setRenderModule, setupRenderer, resizeRenderingContext, autoSetRenderModule} from "./render.js";
+import {setupMarchModule, setMarchModule, setupMarch, autoSetMarchModule} from "./march.js";
 
-setMarchModule("gpu");
-setRenderModule("gpu");
+autoSetMarchModule();
+autoSetRenderModule();
+// setMarchModule("gpu");
+// setRenderModule("gpu");
 
 const functionalDatasets = {
     ripple: {
@@ -82,7 +84,7 @@ async function main() {
     var camera1 = cameraManager.createCamera();
     var mesh1 = meshManager.createMesh();
 
-    var data1 = await dataManager.createData({...datasets.bluntfin_simple_comb, accessType:"complex"});
+    var data1 = await dataManager.createData({...datasets.bluntfin_simple_comb, accessType:"whole"});
     console.log(data1);
 
     if (data1.multiBlock) {
@@ -104,7 +106,6 @@ async function main() {
     var view1 = viewManager.createView({
         camera: camera1,
         data: data1,
-        meshes: [meshManager.createMesh(), meshManager.createMesh()],
         renderMode: renderModes.ISO_SURFACE
     });
 

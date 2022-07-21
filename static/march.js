@@ -5,19 +5,22 @@ import * as gpu from "./webGPU.js";
 import * as wasm from "./marchingWasm.js";
 import * as js from "./marching.js";
 
-export {setMarchModule, updateBuffersNeeded, setupMarchModule, setupMarch, march, marchFine, module};
+export {autoSetMarchModule, setMarchModule, getMarchModule, updateBuffersNeeded, setupMarchModule, setupMarch, march, marchMulti, marchFine, module};
 
 var module;
 
-if (navigator.gpu) {
-    // use webGPU
-    module = "gpu";
-    console.log("webgpu is supported")
-} else {
-    // use wasm
-    module = "wasm";
-    console.log("webgpu is not supported, using wasm")
+function autoSetMarchModule() {
+    if (navigator.gpu) {
+        // use webGPU
+        module = "gpu";
+        console.log("webgpu is supported")
+    } else {
+        // use wasm
+        module = "wasm";
+        console.log("webgpu is not supported, using wasm")
+    }
 }
+
 
 function updateBuffersNeeded() {
     return module != "gpu";
@@ -27,9 +30,15 @@ function setMarchModule(thisModule) {
     module = thisModule;
 }
 
+function getMarchModule() {
+    return module;
+}
+
 async function setupMarchModule() {
     if (module == "gpu") {
         await gpu.setupMarchModule();
+    } else if (module == "wasm") {
+        await wasm.setupWasm();
     }
 }
 
@@ -37,7 +46,7 @@ async function setupMarch(...args) {
     if (module == "gpu") {
         await gpu.setupMarch(...args)
     } else if (module == "wasm") {
-        await wasm.setupWasm(...args)
+        await wasm.setupData(...args)
     }
 }
 
@@ -49,6 +58,21 @@ async function march(...args) {
         wasm.generateMeshWasm(...args);
     } else {
         js.generateMesh(...args);
+    }
+}
+
+async function marchMulti(datas, meshes, threshold) {
+    if (module == "wasm") {
+        var results = [];
+        // set off all marches asynchronously
+        for (let i = 0; i < datas.length; i++) {
+            results.push(march(datas[i], meshes[i], threshold));
+        }
+        await Promise.all(results);
+    } else {
+        for (let i = 0; i < datas.length; i++) {
+            await march(datas[i], meshes[i], threshold);
+        }
     }
 }
 

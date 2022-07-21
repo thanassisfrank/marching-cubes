@@ -9,7 +9,7 @@ import { meshManager } from "./mesh.js";
 
 import {buffersUpdateNeeded, updateMeshBuffers, deleteBuffers, clearScreen, renderView} from "./render.js";
 
-import { march, marchFine } from "./march.js";
+import { march, marchMulti, marchFine } from "./march.js";
 
 export {viewManager, renderModes};
 
@@ -40,17 +40,16 @@ var viewManager = {
     
         // check if the mesh, data and camera objects are supplied
         var camera = config.camera;// || new Camera();
-        var meshes = config.meshes;// || new Mesh();
+        var meshes = config.meshes || [];
         var data = config.data;// || new Data();
 
-        if (!Array.isArray(meshes) && meshes) {
-            meshes = [meshes];
-        }
         if (meshes.length < data.pieces.length) {
             const x = meshes.length;
             for (let i = x; i < data.pieces.length; i++) {
                 meshes.push(meshManager.createMesh());
             }
+        } else if (!data.multiBlock && meshes.length == 0) {
+            meshes = [meshManager.createMesh()];
         }
         console.log(meshes);
         
@@ -84,7 +83,7 @@ var viewManager = {
 
         slider.min = view.data.limits[0];//Math.max(view.data.limits[0], 0);
         slider.max = view.data.limits[1];
-        slider.step = (view.data.limits[1] - view.data.limits[0]) / 100;
+        slider.step = (view.data.limits[1] - view.data.limits[0]) / 200;
 
         slider.value = (view.data.limits[0] + view.data.limits[1]) / 2;
         console.log(slider);
@@ -230,7 +229,21 @@ var viewManager = {
                 }
                 
             } else {
-                this.meshes[0].verts = this.data.points;
+                if (data.structuredGrid) {
+                    this.meshes[0].verts = this.data.points;
+                } else {
+                    this.meshes[0].verts = new Float32Array(this.data.volume*3);
+                    var index = 0;
+                    for (let i = 0; i < this.data.size[0]; i++) {
+                        for (let j = 0; j < this.data.size[1]; j++) {
+                            for (let k = 0; k < this.data.size[2]; k++) {
+                                this.meshes[0].verts[0] = i;
+                                this.meshes[0].verts[1] = j;
+                                this.meshes[0].verts[2] = k;
+                            }
+                        }
+                    }
+                }
                 this.meshes[0].normals = new Float32Array(this.data.volume*3);
                 this.meshes[0].vertsNum = this.data.volume;
             }
@@ -239,13 +252,8 @@ var viewManager = {
         this.generateIsoMesh = async function() {
             if (this.data.multiBlock) {
                 // doesnt support fine meshes for now
-                var results = [];
-                // set off all marches asynchronously
-                for (let i = 0; i < this.data.pieces.length; i++) {
-                    await march(this.data.pieces[i], this.meshes[i], this.threshold);
-                }
-                // wait for all to complete
-                //await Promise.all(results);
+
+                await marchMulti(this.data.pieces, this.meshes, this.threshold);
             } else {
                 await march(this.data, this.meshes[0], this.threshold);
 
@@ -259,10 +267,11 @@ var viewManager = {
                 };
             }
             
-
+            //console.log(this.meshes[0]);
             
         }
         this.updateBuffers = function() {
+            console.log("oob");
             for (let i = 0; i < this.meshes.length; i++) {
                 updateMeshBuffers(this.meshes[i]);
             }

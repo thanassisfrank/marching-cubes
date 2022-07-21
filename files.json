@@ -135,7 +135,7 @@
         "contentType": "application/json"
     },
     {
-        "path": "src/test.wasm",
+        "path": "src/march.wasm",
         "encoding": null,
         "contentType": "application/wasm"
     },

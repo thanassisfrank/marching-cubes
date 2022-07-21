@@ -4,7 +4,7 @@
 import {getCtx, toRads} from "./utils.js";
 import {mat4} from 'https://cdn.skypack.dev/gl-matrix';
 import {VecMath} from "./VecMath.js";
-export {setupRenderer, updateRendererState, renderFrame, createBuffers, updateBuffers, deleteBuffers, clearScreen, renderView};
+export {setupRenderer, renderFrame, createBuffers, updateBuffers, deleteBuffers, clearScreen, renderView};
 
 var gl;
 var vertShader;
@@ -16,18 +16,18 @@ var programInfo;
 
 const clearColor = [1.0, 1.0, 1.0, 1.0];
 
-const vsSource = `
-    attribute vec4 aVertexPosition;
-    attribute vec3 vertNormal;
+const vsSource = `#version 300 es
+    in vec3 aVertexPosition;
+    in vec3 vertNormal;
 
     uniform mat4 uMVMat;
     uniform mat4 uPMat;
 
-    varying vec3 vNormal;
-    varying vec3 vEye;
+    out vec3 vNormal;
+    out vec3 vEye;
 
     void main() {
-        vec4 vertex = uMVMat * aVertexPosition;
+        vec4 vertex = uMVMat * vec4(aVertexPosition, 1.0);
         vEye = -vec3(vertex.xyz);
         vNormal = vertNormal;
         gl_Position = uPMat * vertex;
@@ -35,11 +35,12 @@ const vsSource = `
     }
 `;
 
-const fsSource = `
+const fsSource =`#version 300 es
     precision mediump float;
 
-    varying vec3 vNormal;
-    varying vec3 vEye;
+    in vec3 vNormal;
+    in vec3 vEye;
+    out vec4 fragCol;
 
     struct Light {
         vec3 dir;
@@ -49,7 +50,7 @@ const fsSource = `
     Light light1 = Light(normalize(vec3(0.0, 0.0, -1.0)), vec3(1.0));
     vec3 color = vec3(0.1, 0.7, 0.6);
     vec3 specColor = vec3(1.0);
-    float shininess = 150.0;
+    float shininess = 50.0;
 
     float quant(float val, float step) {
         return step*floor(val/step);
@@ -58,8 +59,14 @@ const fsSource = `
     void main() {
         vec3 E = normalize(vEye);
         vec3 N = -normalize(cross(dFdx(vEye), dFdy(vEye)));
+
+        // check if front facing
+        if (gl_FrontFacing) {
+            color = vec3(0.7, 0.2, 0.2);
+        }
         
-        float diffuseFac = max(dot(-N, light1.dir), 0.0);
+        // needs to be *-1 from wgsl version
+        float diffuseFac = max(dot(N, light1.dir), 0.0);
         
         vec3 diffuse;
         vec3 specular;
@@ -75,8 +82,8 @@ const fsSource = `
         }
 
         
-        gl_FragColor = vec4(diffuse + specular + ambient, 1.0);
-        //gl_FragColor = vec4(reflected, 1.0);
+        fragCol = vec4(diffuse + specular + ambient, 1.0);
+        //fragCol = vec4(reflected, 1.0);
     }
 `;
 
@@ -88,6 +95,7 @@ var setupRenderer = function(canvas) {
         return;
     }
 
+    gl.hint(gl.FRAGMENT_SHADER_DERIVATIVE_HINT, gl.FASTEST);
     gl.clearColor(...clearColor);
     gl.clearDepth(1.0);
     gl.enable(gl.DEPTH_TEST)
@@ -159,22 +167,22 @@ function initBuffers(gl) {
     };
 }
 
-function updateRendererState(gl, mesh) {
-    //console.log(buffers);
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffers["a"].position);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(mesh.verts), gl.DYNAMIC_DRAW);
+// function updateRendererState(gl, mesh) {
+//     //console.log(buffers);
+//     gl.bindBuffer(gl.ARRAY_BUFFER, buffers["a"].position);
+//     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(mesh.verts), gl.DYNAMIC_DRAW);
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffers["a"].normals);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(mesh.normals), gl.DYNAMIC_DRAW);
+//     gl.bindBuffer(gl.ARRAY_BUFFER, buffers["a"].normals);
+//     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(mesh.normals), gl.DYNAMIC_DRAW);
 
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers["a"].indices);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(mesh.indices), gl.DYNAMIC_DRAW);
+//     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers["a"].indices);
+//     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(mesh.indices), gl.DYNAMIC_DRAW);
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, null);
-    //gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+//     gl.bindBuffer(gl.ARRAY_BUFFER, null);
+//     //gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
     
-    indicesLength = mesh.indices.length;
-}
+//     indicesLength = mesh.indices.length;
+// }
 
 var renderFrame = function(gl, projMat, modelMat) {         
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -205,38 +213,43 @@ function getNewBufferId() {
 }
 
 // for creating a set of buffers for a particular id
-function createBuffers() {
-    const id = getNewBufferId();
-    buffers[id] =  {
-      position: gl.createBuffer(),
+function createBuffers(meshObj) {
+    meshObj.buffers =  {
+      verts: gl.createBuffer(),
       indices: gl.createBuffer(),
       normals: gl.createBuffer()
     };
-    return id;
 }
 
-function updateBuffers(mesh) {
-    var thisBuffers = {};
-    gl.bindBuffer(gl.ARRAY_BUFFER, thisBuffers.position);
-    gl.bufferData(gl.ARRAY_BUFFER, Float32Array.from(mesh.verts), gl.DYNAMIC_DRAW);
+function updateBuffers(meshObj) {
+    deleteBuffers(meshObj);
+    createBuffers(meshObj);
+    // console.log(meshObj);
+    gl.bindBuffer(gl.ARRAY_BUFFER, meshObj.buffers.verts);
+    gl.bufferData(gl.ARRAY_BUFFER, Float32Array.from(meshObj.verts), gl.STATIC_DRAW);
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, thisBuffers.normals);
-    gl.bufferData(gl.ARRAY_BUFFER, Float32Array.from(mesh.normals), gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, meshObj.buffers.normals);
+    if (meshObj.normals.length == 0) {
+        // if there are no normals, create blank
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(meshObj.vertsNum*3), gl.STATIC_DRAW);
+    } else {
+        gl.bufferData(gl.ARRAY_BUFFER, Float32Array.from(meshObj.normals), gl.STATIC_DRAW);
+    }   
 
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, thisBuffers.indices);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, Uint32Array.from(mesh.indices), gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, meshObj.buffers.indices);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, Uint32Array.from(meshObj.indices), gl.STATIC_DRAW);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
-
-    mesh.buffers = thisBuffers;
 }
 
-function deleteBuffers(id) {
-    gl.deleteBuffer(buffers[id].position);
-    gl.deleteBuffer(buffers[id].indices);
-    gl.deleteBuffer(buffers[id].normal);
-    delete buffers[id];
+function deleteBuffers(meshObj) {
+    if (meshObj.buffers) {
+        if (meshObj.buffers.verts) gl.deleteBuffer(meshObj.buffers.verts);
+        if (meshObj.buffers.normals) gl.deleteBuffer(meshObj.buffers.normals);
+        if (meshObj.buffers.indices) gl.deleteBuffer(meshObj.buffers.indices);
+    }
+    meshObj.buffers = undefined;
 }
 
 function clearScreen(gl) {
@@ -265,20 +278,21 @@ var renderView = function(gl, projMat, modelViewMat, box, meshes, points) {
     
     for (let i = 0; i < meshes.length; i++) {
         var meshObj = meshes[i];
+        //console.log(meshObj);
         if (meshObj.indicesNum == 0 && meshObj.vertsNum == 0) {
             continue;
         }
-        gl.bindBuffer(gl.ARRAY_BUFFER, meshObj.buffers.position);
+        gl.bindBuffer(gl.ARRAY_BUFFER, meshObj.buffers.verts);
         gl.vertexAttribPointer(programInfo.attribLocations.position, 3, gl.FLOAT, gl.FALSE, 0, 0);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, meshObj.buffers.normals);
         gl.vertexAttribPointer(programInfo.attribLocations.normal, 3, gl.FLOAT, gl.FALSE, 0, 0);
 
         if (points) {
-            gl.drawElements(gl.POINTS, mesh.vertsNum, gl.UNSIGNED_INT, 0);
+            gl.drawArrays(gl.POINTS, 0, meshObj.vertsNum);
         } else {
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, meshObj.buffers.indices); 
-            gl.drawElements(gl.TRIANGLES, mesh.indicesNum, gl.UNSIGNED_INT, 0);
+            gl.drawElements(gl.TRIANGLES, meshObj.indicesNum, gl.UNSIGNED_INT, 0);
         }
         
 

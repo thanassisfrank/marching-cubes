@@ -715,7 +715,7 @@ var marchData = {
 }
 
 const transformThreshold = (threshold, dataObj) => {
-    if (packing != 1) {
+    if (dataObj.marchData.packing != 1) {
         var newThresh = (threshold-dataObj.limits[0])/(dataObj.limits[1]-dataObj.limits[0]);
         //console.log(newThresh);
         return newThresh;
@@ -1419,7 +1419,7 @@ async function getMarchCounts(dataObj, threshold) {
     //const buffers 
 
     //var t0 = performance.now();
-    //console.log(transformThreshold(threshold, dataObj))
+    console.log(transformThreshold(threshold, dataObj))
 
     var commandEncoder = device.createCommandEncoder();
     // take up a fair amount of time

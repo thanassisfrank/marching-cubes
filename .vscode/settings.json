@@ -10,6 +10,9 @@
         "span": "c",
         "string_span": "c",
         "variant": "c",
-        "gsl_util": "c"
+        "gsl_util": "c",
+        "future": "c",
+        "regex": "c",
+        "system_error": "c"
     }
 }
