@@ -49,7 +49,7 @@ var dataManager = {
         var newData = new this.Data(id);
         if (config.f) {
             //create data from the supplied function
-            newData.generateData(...xyzToA(config.size), config.f);
+            await newData.generateData(config);
         } else if (config.type == "raw") {
             // handle raw data
             if (config.accessType == "complex") {
@@ -142,8 +142,7 @@ var dataManager = {
             this.initialised = true;
             console.log("initialised");
         }
-        this.initialiseVTS = function(fileDOM) {
-            const numPieces = getNumPiecesFromVTS(fileDOM)
+        this.initialiseVTS = function(numPieces, extents, limits) {
             for (let i = 0; i < numPieces; i++) {
                 var p;
                 if (numPieces == 1) {
@@ -151,9 +150,10 @@ var dataManager = {
                 } else {
                     var p = this.pieces[i];
                 }
-                const [x, y, z] = getExtentFromVTS(fileDOM, i);
+                
+                const [x, y, z] = extents[i];
                 // get the limtis for the dataset
-                p.limits = getDataLimitsFromVTS(fileDOM, i, getDataNamesFromVTS(fileDOM, i)[0]);
+                p.limits = limits[i];
                 console.log(p.limits);
                 if (!this.limits[0] || p.limits[0] < this.limits[0]) this.limits[0] = p.limits[0];
                 if (!this.limits[1] || p.limits[1] > this.limits[1]) this.limits[1] = p.limits[1];
@@ -195,25 +195,58 @@ var dataManager = {
             this.initialised = true;
             console.log("initialised");
         }
-        this.generateData = function(x, y, z, f) {
-            let v = 0.0;
-            this.data = new Float32Array(x * y * z);
-            for (let i = 0; i < x; i++) {
-                for (let j = 0; j < y; j++) {
-                    for (let k = 0; k < z; k++) {
-                        // values are clamped to >= 0
-                        v = Math.max(0, f(i, j, k));
-                        if (!this.limits[0] || v < this.limits[0]) {
-                            this.limits[0] = v;
-                        } else if (!this.limits[1] || v > this.limits[1]) {
-                            this.limits[1] = v;
-                        }this.data[i * y * z + j * z + k] = v;
-                        
+        this.generateData = async function(config) {
+            if (config.type == "structuredGrid") {
+                const numPieces = config.blocks;
+                var extents = [];
+                var limits = [];
+                this.structuredGrid = true;
+                for (let i = 0; i < numPieces; i++) {
+                    var p;
+                    if (numPieces == 1) {
+                        p = this;
+                    } else {
+                        this.pieces[i] = await dataManager.createData({});
+                        this.pieces[i].structuredGrid = true;
+                        var p = this.pieces[i];
+                        this.multiBlock = true;
+                    }
+                    
+                    const result = config.f(i);
+                    p.limits = result.limits;
+                    limits.push(result.limits);
+                    p.size = result.size;
+                    extents.push(result.size);
+                    p.data = result.data;
+                    p.points = result.points;
+                }
+                this.initialiseVTS(numPieces, extents, limits);
+                console.log(extents, limits);
+                
+            } else {
+                const x = config.size.x;
+                const y = config.size.y;
+                const z = config.size.z;
+                const f = config.f;
+                let v = 0.0;
+                this.data = new Float32Array(x * y * z);
+                for (let i = 0; i < x; i++) {
+                    for (let j = 0; j < y; j++) {
+                        for (let k = 0; k < z; k++) {
+                            // values are clamped to >= 0
+                            v = Math.max(0, f(i, j, k));
+                            if (!this.limits[0] || v < this.limits[0]) {
+                                this.limits[0] = v;
+                            } else if (!this.limits[1] || v > this.limits[1]) {
+                                this.limits[1] = v;
+                            }this.data[i * y * z + j * z + k] = v;
+                            
+                        }
                     }
                 }
+                console.log(this.limits);
+                this.initialise(x, y, z, ...this.cellSize);
             }
-            console.log(this.limits);
-            this.initialise(x, y, z, ...this.cellSize);
         };
         this.fromRawFile = function(src, DataType, x, y, z) {
             var that = this;
@@ -262,6 +295,8 @@ var dataManager = {
                 .then(text => parseXML(text))
                 .then(async function(fileDOM) {
                     const numPieces = getNumPiecesFromVTS(fileDOM);
+                    var extents = [];
+                    var limits = [];
                     console.log(numPieces)
                     for (let i = 0; i < numPieces; i++) {
                         var p;
@@ -278,9 +313,12 @@ var dataManager = {
                         // get the first dataset
                         var pointDataNames = getDataNamesFromVTS(fileDOM, i);
                         p.data = getPointDataFromVTS(fileDOM, i, pointDataNames[0]);
+
+                        extents.push(getExtentFromVTS(fileDOM, i));
+                        limits.push(getDataLimitsFromVTS(fileDOM, i, getDataNamesFromVTS(fileDOM, i)[0]))
                     }
                     
-                    that.initialiseVTS(fileDOM);
+                    that.initialiseVTS(numPieces, extents, limits);
                     console.log(that)
                 });
         }

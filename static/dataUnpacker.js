@@ -277,7 +277,6 @@ function processDataArray(
             //   values = integer64to32(values);
             // }
         } else {
-            console.log(DATA_TYPES[headerType].BYTES_PER_ELEMENT);
             values = new DataArrayType(uint8.buffer, DATA_TYPES[headerType].BYTES_PER_ELEMENT); // Skip the byte count
             // // Handle (u)int64 hoping no overflow...
             // if (dataType.indexOf('Int64') !== -1) {

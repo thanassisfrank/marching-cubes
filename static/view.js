@@ -1,7 +1,7 @@
 // view.js
 // handles the creation of view objects, their management and deletion
 
-import { get, show, toRads, newId } from "./utils.js";
+import { get, show, toRads, newId, timer } from "./utils.js";
 import { VecMath } from "./VecMath.js";
 import {mat4} from 'https://cdn.skypack.dev/gl-matrix';
 
@@ -86,8 +86,6 @@ var viewManager = {
         slider.step = (view.data.limits[1] - view.data.limits[0]) / 200;
 
         slider.value = (view.data.limits[0] + view.data.limits[1]) / 2;
-        console.log(slider);
-
 
         closeBtn.onclick = () => {
             this.deleteView(view);
@@ -199,11 +197,14 @@ var viewManager = {
                 this.updateThreshold(this.threshold);
             }            
         }
+        this.getTotalVerts = function() {
+            return this.meshes.reduce((a,b) => a + b.vertsNum, 0);
+        }
         this.updateThreshold = async function(val) {
             // only update the mesh if marching is needed
             if (this.renderMode == renderModes.DATA_POINTS) return;
-            console.log(val);
-            //console.log(this.meshes);
+
+            timer.start("march");
             // stops the fine timer running if it is
             clearTimeout(this.fineTimer.timer)
             if (this.data.initialised){
@@ -216,9 +217,9 @@ var viewManager = {
                     if (buffersUpdateNeeded()) this.updateBuffers();
                     //view.timeLogs.push([this.mesh.verts.length/3 | this.mesh.vertNum, time]);
                     this.updating = false;
-                    console.log("done mesh")
                 };
             };
+            timer.stop("march", this.getTotalVerts());
         }
         this.transferPointsToMesh = function() {
             if (this.data.multiBlock) {
@@ -237,12 +238,14 @@ var viewManager = {
                     for (let i = 0; i < this.data.size[0]; i++) {
                         for (let j = 0; j < this.data.size[1]; j++) {
                             for (let k = 0; k < this.data.size[2]; k++) {
-                                this.meshes[0].verts[0] = i;
-                                this.meshes[0].verts[1] = j;
-                                this.meshes[0].verts[2] = k;
+                                this.meshes[0].verts[3*index + 0] = i;
+                                this.meshes[0].verts[3*index + 1] = j;
+                                this.meshes[0].verts[3*index + 2] = k;
+                                index++;
                             }
                         }
                     }
+                    console.log("made points");
                 }
                 this.meshes[0].normals = new Float32Array(this.data.volume*3);
                 this.meshes[0].vertsNum = this.data.volume;
@@ -254,8 +257,10 @@ var viewManager = {
                 // doesnt support fine meshes for now
 
                 await marchMulti(this.data.pieces, this.meshes, this.threshold);
+                
             } else {
                 await march(this.data, this.meshes[0], this.threshold);
+                //console.log(this.meshes[0]);
 
                 if (this.data.complex) {
                     var that = this;
@@ -265,13 +270,10 @@ var viewManager = {
                         await marchFine(that.data, that.meshes[0], that.threshold);
                     }, this.fineTimer.duration);
                 };
-            }
-            
-            //console.log(this.meshes[0]);
-            
+            }         
         }
         this.updateBuffers = function() {
-            console.log("oob");
+            // console.log("oob");
             for (let i = 0; i < this.meshes.length; i++) {
                 updateMeshBuffers(this.meshes[i]);
             }

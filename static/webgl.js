@@ -1,7 +1,7 @@
 // webglRender.js
 // implements a 3d engine using the webgl api
 
-import {getCtx, toRads} from "./utils.js";
+import {getCtx, timer, toRads} from "./utils.js";
 import {mat4} from 'https://cdn.skypack.dev/gl-matrix';
 import {VecMath} from "./VecMath.js";
 export {setupRenderer, renderFrame, createBuffers, updateBuffers, deleteBuffers, clearScreen, renderView};
@@ -31,6 +31,7 @@ const vsSource = `#version 300 es
         vEye = -vec3(vertex.xyz);
         vNormal = vertNormal;
         gl_Position = uPMat * vertex;
+        gl_PointSize = 2.0;
         
     }
 `;
@@ -94,7 +95,6 @@ var setupRenderer = function(canvas) {
         console.log("webgl not supported");
         return;
     }
-
     gl.hint(gl.FRAGMENT_SHADER_DERIVATIVE_HINT, gl.FASTEST);
     gl.clearColor(...clearColor);
     gl.clearDepth(1.0);
@@ -241,6 +241,7 @@ function updateBuffers(meshObj) {
 
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+    //console.log("updated");
 }
 
 function deleteBuffers(meshObj) {
@@ -261,6 +262,7 @@ function clearScreen(gl) {
 
 // for rendering a particular set of meshes associated with a view
 var renderView = function(gl, projMat, modelViewMat, box, meshes, points) {
+    timer.start("render");
     gl.viewport(box.left, box.bottom, box.width, box.height);
     gl.scissor(box.left, box.bottom, box.width, box.height);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -275,13 +277,16 @@ var renderView = function(gl, projMat, modelViewMat, box, meshes, points) {
         false,
         modelViewMat
     );
-    
+    //console.log(meshes);
+    var totalVerts = 0;
     for (let i = 0; i < meshes.length; i++) {
         var meshObj = meshes[i];
         //console.log(meshObj);
         if (meshObj.indicesNum == 0 && meshObj.vertsNum == 0) {
             continue;
         }
+        totalVerts += meshObj.vertsNum;
+
         gl.bindBuffer(gl.ARRAY_BUFFER, meshObj.buffers.verts);
         gl.vertexAttribPointer(programInfo.attribLocations.position, 3, gl.FLOAT, gl.FALSE, 0, 0);
 
@@ -295,6 +300,9 @@ var renderView = function(gl, projMat, modelViewMat, box, meshes, points) {
             gl.drawElements(gl.TRIANGLES, meshObj.indicesNum, gl.UNSIGNED_INT, 0);
         }
         
+        var sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+        gl.clientWaitSync(sync, gl.SYNC_FLUSH_COMMANDS_BIT, 0);
+        timer.stop("render", totalVerts);
 
         //gl.bindBuffer(gl.ARRAY_BUFFER, null);
         //gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);

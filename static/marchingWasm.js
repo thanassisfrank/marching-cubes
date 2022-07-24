@@ -10,10 +10,10 @@ var WASMModule;
 const imports = {
     env: {
         console_log: function(n) {
-            console.log(n);
+            //console.log(n);
         },
         console_log_bin: function(n) {
-            console.log(n.toString(2));
+            //console.log(n.toString(2));
         }
     }
 }  
