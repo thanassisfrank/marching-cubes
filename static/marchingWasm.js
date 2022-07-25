@@ -26,7 +26,7 @@ async function setupWasm() {
 
 async function setupData(dataObj) {
     var obj = await WebAssembly.instantiate(WASMModule, imports);
-    console.log(obj);
+    //console.log(obj);
     var marchData = {};
     marchData.memory = obj.exports.memory;
     marchData.generateMesh = obj.exports.generateMesh;
@@ -51,17 +51,17 @@ async function setupData(dataObj) {
     //send data to wasm object
         const dataLoc = marchData.assignDataLocation(...dataObj.size);
         const dataArray = new Float32Array(marchData.memory.buffer, dataLoc, dataObj.volume);
-        console.log(dataObj.data.constructor);
+        //console.log(dataObj.data.constructor);
         console.log("loading data to wasm instance");
         if (dataObj.data.constructor != Float32Array) {
-            console.log("slow");
+            //console.log("slow");
             dataArray.set(Float32Array.from(dataObj.data, parseFloat));
         } else {
             dataArray.set(Float32Array.from(dataObj.data));
         }
-        console.log("done");
+        //console.log("done");
 
-        console.log("data length:", dataObj.data.length);
+        //console.log("data length:", dataObj.data.length);
 
         if (dataObj.structuredGrid) {
             const pointsLoc = marchData.assignPointsLocation(...dataObj.size);

@@ -23,7 +23,7 @@
             padding: 20px;
             z-index: 10;
             border: 1px solid red;
-            visibility: hidden;
+            display: none;
             resize: both;
             overflow: auto
         }
@@ -79,24 +79,15 @@
             <div id="add-view-popup">
                 <p>create new view</p>
                 <select id="data-select">
-                    <option>data1</option>
-                    <option>data2</option>
-                    <option>data3</option>
                 </select>
                 <br>
                 <select id="camera-select">
-                    <option>camera1</option>
-                    <option>camera2</option>
-                    <option>create new camera</option>
                 </select>
                 <br>
                 <select id="threshold-select">
-                    <option>threshold1</option>
-                    <option>threshold2</option>
-                    <option>create new threshold</option>
                 </select>
                 <br>
-                <button>create</button>
+                <button id="create-view-btn">create</button>
             </div>
         </div>
     </div>

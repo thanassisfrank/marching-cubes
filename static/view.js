@@ -1,15 +1,17 @@
 // view.js
 // handles the creation of view objects, their management and deletion
 
-import { get, show, toRads, newId, timer } from "./utils.js";
+import { get, show, isVisible, toRads, newId, timer } from "./utils.js";
 import { VecMath } from "./VecMath.js";
 import {mat4} from 'https://cdn.skypack.dev/gl-matrix';
 
 import { meshManager } from "./mesh.js";
+import { cameraManager } from "./camera.js";
 
 import {buffersUpdateNeeded, updateMeshBuffers, deleteBuffers, clearScreen, renderView} from "./render.js";
 
 import { march, marchMulti, marchFine } from "./march.js";
+import { dataManager } from "./data.js";
 
 export {viewManager, renderModes};
 
@@ -61,6 +63,14 @@ var viewManager = {
         camera.setModelMat(modelMat);
         camera.setProjMat();
         camera.setDist(1.5*data.maxSize*data.maxCellSize);
+
+        // register a new user of the used objects
+        for (let mesh of meshes) {
+            meshManager.addUser(mesh);
+        }
+        cameraManager.addUser(camera);
+        dataManager.addUser(data);
+
 
         // generate id
         const id = newId(this.views);
@@ -152,7 +162,9 @@ var viewManager = {
 
     }, 
     deleteView: function(view) {
-        console.log(view);
+        // hide the window
+        if (isVisible(get("add-view-popup"))) get("add-view").click();
+
         this.views?.[view.id].delete();
 
         delete this.views[view.id];
@@ -316,11 +328,12 @@ var viewManager = {
         }
         this.delete = function() {
             this.getViewContainer().remove();
-            deleteBuffers(this.bufferId);
-            // delete associated buffers on gpu
-            //    call renderer's delete associated buffers function
-            // delete associated DOM elements using elem.remove();
-
+            // unregister for objects
+            for (let mesh of this.meshes) {
+                meshManager.removeUser(mesh);
+            }
+            cameraManager.removeUser(camera);
+            dataManager.removeUser(data);
         }
     }
 }

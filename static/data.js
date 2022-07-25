@@ -5,6 +5,8 @@ import {VecMath} from "./VecMath.js";
 import {vec3} from "https://cdn.skypack.dev/gl-matrix";
 import { newId, DATA_TYPES, xyzToA, parseXML } from "./utils.js";
 import { decompressB64Str, getNumPiecesFromVTS, getDataNamesFromVTS, getPointsFromVTS, getExtentFromVTS, getPointDataFromVTS, getDataLimitsFromVTS} from "./dataUnpacker.js"
+import { cleanupMarchData } from "./march.js";
+
 export {dataManager};
 
 const blockSize = [4, 4, 4]
@@ -24,6 +26,8 @@ const blockSize = [4, 4, 4]
 
 var dataManager = {
     datas: {},
+    // keeps a track of the names of loaded datasets
+    loaded: new Set(),
     // called by outside code to generate a new data object
     // config object form:
     // {
@@ -44,9 +48,13 @@ var dataManager = {
     //     "f": some function
     //     "accessType": "whole"/"complex"
     // }
+    
     createData: async function(config){
         const id = newId(this.datas);
         var newData = new this.Data(id);
+        console.log(config.name);
+        newData.dataName = config.name;
+        this.loaded.add(config.name);
         if (config.f) {
             //create data from the supplied function
             await newData.generateData(config);
@@ -68,8 +76,20 @@ var dataManager = {
 
         return newData;
     },
+    addUser: function(data) {
+        this.datas[data.id].users++;
+        return  this.datas[data.id].users;
+    },
+    removeUser: function(data) {
+        this.datas[data.id].users--;
+        if (this.datas[data.id].users == 0) {
+            // no users, cleanup the object
+            this.deleteData(data)
+        }
+    },
     Data: function(id) {
         this.id = id;
+        this.users = 0;
         // a set of data associated with points
         // complex:
         // - a low resolution of whole dataset for fast scrolling
@@ -303,7 +323,9 @@ var dataManager = {
                         if (numPieces == 1) {
                             p = that;
                         } else {
-                            that.pieces[i] = await dataManager.createData({});
+                            that.pieces[i] = await dataManager.createData({name: that.dataName + " " + String(i)});
+                            // register as a new user of this data
+                            dataManager.addUser(that.pieces[i]);
                             that.pieces[i].structuredGrid = true;
                             var p = that.pieces[i];
                             that.multiBlock = true;
@@ -319,7 +341,7 @@ var dataManager = {
                     }
                     
                     that.initialiseVTS(numPieces, extents, limits);
-                    console.log(that)
+                    //console.log(that)
                 });
         }
         this.setCellSize = function(size) {
@@ -599,6 +621,14 @@ var dataManager = {
         }
     },
     deleteData: function(data) {
+        // cleanup the data used by the march module
+        if (data.multiBlock) {
+            for (let subData of data.pieces) {
+                this.removeUser(subData);
+            }
+        }
+        this.loaded.delete(data.dataName);
+        cleanupMarchData(data);
         delete this.datas[data.id];
     }
 }

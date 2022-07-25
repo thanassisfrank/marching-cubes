@@ -5,11 +5,9 @@ import * as gpu from "./webGPU.js";
 import * as wasm from "./marchingWasm.js";
 import * as js from "./marching.js";
 
-export {autoSetMarchModule, setMarchModule, getMarchModule, updateBuffersNeeded, setupMarchModule, setupMarch, march, marchMulti, marchFine, module};
+export var module;
 
-var module;
-
-function autoSetMarchModule() {
+export function autoSetMarchModule() {
     if (navigator.gpu) {
         // use webGPU
         module = "gpu";
@@ -22,19 +20,19 @@ function autoSetMarchModule() {
 }
 
 
-function updateBuffersNeeded() {
+export function updateBuffersNeeded() {
     return module != "gpu";
 }
 
-function setMarchModule(thisModule) {
+export function setMarchModule(thisModule) {
     module = thisModule;
 }
 
-function getMarchModule() {
+export function getMarchModule() {
     return module;
 }
 
-async function setupMarchModule() {
+export async function setupMarchModule() {
     if (module == "gpu") {
         await gpu.setupMarchModule();
     } else if (module == "wasm") {
@@ -42,7 +40,7 @@ async function setupMarchModule() {
     }
 }
 
-async function setupMarch(...args) {
+export async function setupMarch(...args) {
     if (module == "gpu") {
         await gpu.setupMarch(...args)
     } else if (module == "wasm") {
@@ -51,7 +49,7 @@ async function setupMarch(...args) {
 }
 
 // called when marching a regular grid of raw data
-async function march(...args) {
+export async function march(...args) {
     if (module == "gpu") {
         await gpu.march(...args);
     } else if (module == "wasm") {
@@ -61,7 +59,7 @@ async function march(...args) {
     }
 }
 
-async function marchMulti(datas, meshes, threshold) {
+export async function marchMulti(datas, meshes, threshold) {
     if (module == "wasm") {
         var results = [];
         // set off all marches asynchronously
@@ -77,8 +75,12 @@ async function marchMulti(datas, meshes, threshold) {
 }
 
 // called when marching
-async function marchFine(...args) {
+export async function marchFine(...args) {
     if (module == "gpu") {
         await gpu.marchFine(...args);
     }
+}
+
+export async function cleanupMarchData(...args) {
+    // wasm instances are garbage collected
 }

@@ -159,31 +159,6 @@ var loadShader = function(gl, type, source) {
       return shader;
 }
 
-function initBuffers(gl) {
-    return {
-      position: gl.createBuffer(),
-      indices: gl.createBuffer(),
-      normals: gl.createBuffer()
-    };
-}
-
-// function updateRendererState(gl, mesh) {
-//     //console.log(buffers);
-//     gl.bindBuffer(gl.ARRAY_BUFFER, buffers["a"].position);
-//     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(mesh.verts), gl.DYNAMIC_DRAW);
-
-//     gl.bindBuffer(gl.ARRAY_BUFFER, buffers["a"].normals);
-//     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(mesh.normals), gl.DYNAMIC_DRAW);
-
-//     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers["a"].indices);
-//     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(mesh.indices), gl.DYNAMIC_DRAW);
-
-//     gl.bindBuffer(gl.ARRAY_BUFFER, null);
-//     //gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
-    
-//     indicesLength = mesh.indices.length;
-// }
-
 var renderFrame = function(gl, projMat, modelMat) {         
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -202,14 +177,6 @@ var renderFrame = function(gl, projMat, modelMat) {
     );
 
     gl.drawElements(gl.TRIANGLES, indicesLength, gl.UNSIGNED_SHORT, 0);
-}
-
-function getNewBufferId() {
-    var id = Object.keys(buffers).length;
-        while (buffers.hasOwnProperty(String(id))) {
-            id++;
-        };
-        return String(id);
 }
 
 // for creating a set of buffers for a particular id

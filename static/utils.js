@@ -5,7 +5,7 @@ export var get = (id) => {
 }
 
 export var isVisible = (elem) => {
-    return getComputedStyle(elem).display != "none";
+    return getComputedStyle(elem).display.toLowerCase() != "none";
 }
 
 export var hide = (elem) => {
@@ -13,7 +13,7 @@ export var hide = (elem) => {
 }
 
 export var show = (elem) => {
-    elem.style.display = "initial";
+    elem.style.display = "block";
 }
 
 export var getCtx = (canvas, type) => {

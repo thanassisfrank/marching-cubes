@@ -16,8 +16,20 @@ var cameraManager = {
         this.cameras[id] = newCamera;
         return newCamera;
     },
+    addUser: function(camera) {
+        this.cameras[camera.id].users++;
+        return  this.cameras[camera.id].users;
+    },
+    removeUser: function(camera) {
+        this.cameras[camera.id].users--;
+        if (this.cameras[camera.id].users == 0) {
+            // no users, cleanup the object
+            this.deleteCamera(camera)
+        }
+    },
     Camera: function(id) {
         this.id = id;
+        this.users = 0;
         // horizontal angle
         this.th = 0;
         // vertical angle

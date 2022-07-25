@@ -1,6 +1,7 @@
 //mesh.js
 
 import { newId } from "./utils.js";
+import {deleteBuffers} from "./render.js";
 export {meshManager};
 
 
@@ -13,7 +14,19 @@ var meshManager = {
         this.meshes[id] = newMesh;
         return newMesh;
     },
+    addUser: function(mesh) {
+        this.meshes[mesh.id].users++;
+        return  this.meshes[mesh.id].users;
+    },
+    removeUser: function(mesh) {
+        this.meshes[mesh.id].users--;
+        if (this.meshes[mesh.id].users == 0) {
+            // no users, cleanup the object
+            this.deleteMesh(mesh)
+        }
+    },
     deleteMesh: function(mesh) {
+        deleteBuffers(mesh);
         delete this.meshes[mesh.id];
     },
     Mesh: function(id) {
@@ -23,6 +36,8 @@ var meshManager = {
         this.normals = [];
         this.indicesNum = 0;
         this.vertsNum = 0;
+        this.users = 0;
+
         this.clear = function() {
             this.verts = [];
             this.indices = [];

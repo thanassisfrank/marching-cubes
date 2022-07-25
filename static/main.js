@@ -107,15 +107,104 @@ async function main() {
     // setup the view creation window button
     get("add-view").onclick = function() {
         var addViewPopup = get("add-view-popup");
+        var dataOptions = get("data-select");
+        var cameraOptions = get("camera-select");
+        var thresholdOptions = get("threshold-select");
         if (isVisible(addViewPopup)) {
+            console.log("hiding...");
             hide(addViewPopup);
             get("add-view").innerText = "+";
+
+            // remove all the options from within each
+            while (dataOptions.firstChild) {
+                dataOptions.removeChild(dataOptions.firstChild);
+            }
+            while (cameraOptions.firstChild) {
+                cameraOptions.removeChild(cameraOptions.firstChild);
+            }
+            while (thresholdOptions.firstChild) {
+                thresholdOptions.removeChild(thresholdOptions.firstChild);
+            }
+
         } else {
-            show(addViewPopup);
+            console.log("showing...");
             get("add-view").innerText = "X";
+            
+            // pull the current options from the camera manager
+            var currentCameras = cameraManager.cameras;
+            for (let id in currentCameras) {
+                var elem = document.createElement("OPTION");
+                elem.value = id;
+                elem.innerText = id;
+                cameraOptions.appendChild(elem);
+            }
+
+            // get the data from the datasets object
+            var currentDatas = dataManager.datas;
+            for (let id in datasets) {
+                var elem = document.createElement("OPTION");
+                if (dataManager.loaded.has(datasets[id].name)) {
+                    for (let dataId in currentDatas) {
+                        if (currentDatas[dataId].dataName == datasets[id].name) {
+                            elem.value = dataId;
+                            break;
+                        }
+                    }
+                    elem.setAttribute("loaded", true);
+                } else {
+                    elem.value = id;
+                    elem.setAttribute("loaded", false);
+                }
+                
+                elem.innerText = datasets[id].name;
+                dataOptions.appendChild(elem);
+            }
+            
+            show(addViewPopup);
         }
-        // populate options
-        // populate
+    }
+
+    get("create-view-btn").onclick = async function() {
+        var d = get("data-select");
+        var c = get("camera-select");
+        //var thresholdOptions = get("threshold-select");
+
+        const selectedDataElem = d.options[d.selectedIndex];
+        const selectedCameraElem = c.options[c.selectedIndex];
+
+        var newData;
+
+        if (selectedDataElem.getAttribute("loaded") == "false") {
+            timer.start("setup data");
+            newData = await dataManager.createData({
+                ...datasets[selectedDataElem.value], 
+                accessType:"whole"
+            });
+
+            if (newData.multiBlock) {
+                var results = [];
+                for (let i = 0; i < newData.pieces.length; i++) {
+                    results.push(setupMarch(newData.pieces[i]));
+                }
+                await Promise.all(results);
+                
+            } else {
+                await setupMarch(newData);
+            }
+            timer.stop("setup data", newData.data.length);
+        } else {
+            // is loaded already
+            newData = dataManager.datas[selectedDataElem.value];
+        }
+
+        viewManager.createView({
+            camera: cameraManager.createCamera(),
+            data: newData,
+            renderMode: renderModes.ISO_SURFACE
+        });
+
+        // hide the window
+        if (isVisible(get("add-view-popup"))) get("add-view").click();
     }
     
 
@@ -125,7 +214,7 @@ async function main() {
     //var mesh1 = meshManager.createMesh();
     timer.start("setup data");
     var data1 = await dataManager.createData({...datasets.multicomb_simple, accessType:"whole"});
-    console.log(data1);
+    //console.log(data1);
 
     if (data1.multiBlock) {
         console.log("doing multi")
@@ -159,6 +248,11 @@ async function main() {
             case "b":
                 timer.copySamples("render");
                 console.log("copied", timer.times["render"].samples.length);
+                break;
+            case "c":
+                console.log(meshManager.meshes);
+                console.log(cameraManager.cameras);
+                console.log(dataManager.datas);
                 break;
             case "Alt":
                 e.preventDefault();
