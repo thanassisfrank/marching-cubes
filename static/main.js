@@ -1,6 +1,6 @@
 // main.js
 
-import {get, isVisible, show, hide, setupCanvasDims, repositionCanvas, parseXML, IntervalTree, timer} from "./utils.js";
+import {get, isVisible, show, hide, removeAllChildren, setupCanvasDims, repositionCanvas, parseXML, IntervalTree, timer} from "./utils.js";
 
 import {dataManager} from "./data.js";
 import {cameraManager} from "./camera.js";
@@ -12,8 +12,7 @@ import {setupMarchModule, setMarchModule, setupMarch, autoSetMarchModule} from "
 
 autoSetMarchModule();
 autoSetRenderModule();
-// setMarchModule("gpu");
-// setRenderModule("gpu");
+
 const BLOCKS = 10;
 const functionalDatasets = {
     ripple: {
@@ -43,8 +42,8 @@ const functionalDatasets = {
             let limits = [Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY];
             const size = {
                 th: 60, // around cylinder
-                y: 30, // down cylinder axis
-                r: 10, // outwards from centre
+                y: 100, // down cylinder axis
+                r: 30, // outwards from centre
             };
             // make list of positions
             var points = [];
@@ -116,15 +115,9 @@ async function main() {
             get("add-view").innerText = "+";
 
             // remove all the options from within each
-            while (dataOptions.firstChild) {
-                dataOptions.removeChild(dataOptions.firstChild);
-            }
-            while (cameraOptions.firstChild) {
-                cameraOptions.removeChild(cameraOptions.firstChild);
-            }
-            while (thresholdOptions.firstChild) {
-                thresholdOptions.removeChild(thresholdOptions.firstChild);
-            }
+            removeAllChildren(dataOptions);
+            removeAllChildren(cameraOptions);
+            removeAllChildren(thresholdOptions);
 
         } else {
             console.log("showing...");
@@ -210,35 +203,6 @@ async function main() {
 
     if (!ctx) return;
 
-    var camera1 = cameraManager.createCamera();
-    //var mesh1 = meshManager.createMesh();
-    timer.start("setup data");
-    var data1 = await dataManager.createData({...datasets.multicomb_simple, accessType:"whole"});
-    //console.log(data1);
-
-    if (data1.multiBlock) {
-        console.log("doing multi")
-        var results = [];
-        for (let i = 0; i < data1.pieces.length; i++) {
-            results.push(setupMarch(data1.pieces[i]));
-        }
-        await Promise.all(results);
-        
-    } else {
-        await setupMarch(data1);
-    }
-    timer.stop("setup data", data1.data.length);
-    
-
-    //console.log(data1.maxSize);
-    camera1.setDist(1.2*data1.maxSize);
-
-    var view1 = viewManager.createView({
-        camera: camera1,
-        data: data1,
-        renderMode: renderModes.ISO_SURFACE
-    });
-
     document.body.onkeydown = function(e) {
         switch (e.key) {
             case "a":
@@ -250,6 +214,7 @@ async function main() {
                 console.log("copied", timer.times["render"].samples.length);
                 break;
             case "c":
+                console.log(viewManager.views);
                 console.log(meshManager.meshes);
                 console.log(cameraManager.cameras);
                 console.log(dataManager.datas);

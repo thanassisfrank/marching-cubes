@@ -116,5 +116,27 @@
             "z": 39
         },
         "dataType": "float32"
+    },
+    "turbulence": {
+        "name": "Turbulence",
+        "path": "data/tacc_turbulence_256x256x256_float32.raw",
+        "type": "raw",
+        "size": {
+            "x": 256,
+            "y": 256,
+            "z": 256
+        },
+        "dataType": "float32"
+    },
+    "heptane": {
+        "name": "Heptane",
+        "path": "data/csafe_heptane_302x302x302_uint8.raw",
+        "type": "raw",
+        "size": {
+            "x": 302,
+            "y": 302,
+            "z": 302
+        },
+        "dataType": "uint8"
     }
 }

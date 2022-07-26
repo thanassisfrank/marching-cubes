@@ -83,4 +83,7 @@ export async function marchFine(...args) {
 
 export async function cleanupMarchData(...args) {
     // wasm instances are garbage collected
+    if (module == "gpu") {
+        await gpu.cleanupMarchData(...args);
+    }
 }

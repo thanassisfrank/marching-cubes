@@ -24,6 +24,12 @@ export var create = (type) => {
     return document.createElement(type);
 }
 
+export var removeAllChildren = (elem) => {
+    while (elem.firstChild) {
+        elem.removeChild(elem.firstChild);
+    }
+}
+
 export var setupCanvasDims = (canvas) => {
     let style = getComputedStyle(canvas)
     canvas.width = parseInt(style.getPropertyValue("width"));
