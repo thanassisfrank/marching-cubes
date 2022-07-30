@@ -56,7 +56,7 @@ var cameraManager = {
             let projMat = mat4.create();
             const aspect = 1;
             const zNear = 0.1;
-            const zFar = 1000.0;
+            const zFar = 10000.0;
         
             mat4.perspective(projMat,toRads(this.fov),aspect,zNear,zFar);
             this.projMat = projMat;

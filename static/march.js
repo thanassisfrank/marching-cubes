@@ -61,12 +61,12 @@ export async function march(...args) {
 
 export async function marchMulti(datas, meshes, threshold) {
     if (module == "wasm") {
-        var results = [];
         // set off all marches asynchronously
         for (let i = 0; i < datas.length; i++) {
-            results.push(march(datas[i], meshes[i], threshold));
+            march(datas[i], meshes[i], threshold);
         }
-        await Promise.all(results);
+        // wait until queue is empty again
+        await gpu.waitForDone();
     } else {
         for (let i = 0; i < datas.length; i++) {
             await march(datas[i], meshes[i], threshold);

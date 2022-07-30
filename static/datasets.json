@@ -3,6 +3,7 @@
         "name": "engine",
         "path": "data/engine_256x256x128_uint8.raw",
         "type": "raw",
+        "complexAvailable": true,
         "size": {
             "x": 128,
             "y": 256,
@@ -37,6 +38,7 @@
         "name": "silicium",
         "path": "data/silicium_98x34x34_uint8.raw",
         "type": "raw",
+        "complexAvailable": true,
         "size": {
             "x": 34,
             "y": 34,

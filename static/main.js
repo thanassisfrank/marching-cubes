@@ -1,6 +1,6 @@
 // main.js
 
-import {get, isVisible, show, hide, removeAllChildren, setupCanvasDims, repositionCanvas, parseXML, IntervalTree, timer} from "./utils.js";
+import {get, isVisible, show, hide, removeAllChildren, setupCanvasDims, repositionCanvas, parseXML, IntervalTree, OldIntervalTree, timer} from "./utils.js";
 
 import {dataManager} from "./data.js";
 import {cameraManager} from "./camera.js";
@@ -43,7 +43,7 @@ const functionalDatasets = {
             const size = {
                 th: 60, // around cylinder
                 y: 100, // down cylinder axis
-                r: 30, // outwards from centre
+                r: 60, // outwards from centre
             };
             // make list of positions
             var points = [];
@@ -169,10 +169,18 @@ async function main() {
 
         if (selectedDataElem.getAttribute("loaded") == "false") {
             timer.start("setup data");
-            newData = await dataManager.createData({
-                ...datasets[selectedDataElem.value], 
-                accessType:"whole"
-            });
+            if (datasets[selectedDataElem.value].complexAvailable) {
+                newData = await dataManager.createData({
+                    ...datasets[selectedDataElem.value], 
+                    accessType:"complex"
+                });
+            } else {
+                newData = await dataManager.createData({
+                    ...datasets[selectedDataElem.value], 
+                    accessType:"whole"
+                });
+            }
+            
 
             if (newData.multiBlock) {
                 var results = [];
@@ -205,6 +213,16 @@ async function main() {
 
     document.body.onkeydown = function(e) {
         switch (e.key) {
+            case " ":
+                timer.log();
+                break;
+            case "l":
+                const requested = prompt("which event?");
+                const num = timer.copySamples(requested);
+                if (num) {
+                    console.log("copied", timer.times[requested].samples.length);
+                }
+                break;
             case "a":
                 timer.copySamples("march");
                 console.log("copied", timer.times["march"].samples.length);
@@ -225,28 +243,71 @@ async function main() {
         }
     }
 
-    // var timeout = setTimeout(() => {
-    //     var elem = document.getElementsByTagName("INPUT")[0]
-    //     elem.setAttribute("value", elem.min + 0.1*(elem.max - elem.min));
-    //     elem.oninput.apply(elem);
-    // }, 3000);
 
     // interval tree test =============================================
-    // var tree = new IntervalTree([0, 10]);
-    // for (let i = 0; i < 20; i++) {
-    //     const a = 10*Math.random();
-    //     const b = 10*Math.random();
-    //     if (a > b) {
-    //         tree.insert([b, a], String.fromCharCode(i+65));
-    //         console.log([b, a, String.fromCharCode(i+65)])
+
+    // timer.start("tree create")
+    // var intervals = [];
+    // var maxVal = 1;
+    // var tree = new IntervalTree();
+    // for (let i = 0; i < 100000; i++) {
+    //     const a = maxVal*Math.random();
+    //     const b = maxVal*Math.random();
+    //     const data = i;
+    //     if (a < b) {
+    //         tree.insert([a, b], data);
+    //         intervals.push(a, b)
     //     } else {
-    //         tree.insert([a, b], String.fromCharCode(i+65));
-    //         console.log([a, b, String.fromCharCode(i+65)])
+    //         tree.insert([b, a], data);
+    //         intervals.push(b, a)
     //     }
     // }
+    // timer.stop("tree create");
 
-    // console.log(tree.tree);
-    // console.log(tree.queryVal(6));
+    // function linearQueryRange(range) {
+    //     let out = [];
+    //     let l, r;
+    //     for (let i = 0; i < intervals.length/2; i++) {
+    //         l = intervals[2*i];
+    //         r = intervals[2*i + 1];
+    //         if (l <= range[1] && range[0] <= r ) {
+    //             out.push(i);
+    //         }
+    //     }
+    //     return out;
+    // }
+
+    // for (let i = 0; i < 300; i++) {
+    //     const qVal1 = maxVal*0.2*Math.random();
+    //     const qVal2 = maxVal*0.2*Math.random();
+    //     var qInt;
+    //     if (qVal1 < qVal2) {
+    //         qInt = [qVal1, qVal2];
+    //     } else {
+    //         qInt = [qVal2, qVal1];
+    //     }
+    //     timer.start("linear");
+    //     var l1 = linearQueryRange(qInt).length;
+    //     timer.stop("linear", l1);
+    //     timer.start("tree");
+    //     var l2 = tree.queryRange(qInt).length;
+    //     timer.stop("tree", l2);
+    //     if (l1 != l2) console.log("diff");
+    // }
+
+    console.log("done");
+    
+
+   
+
+    // if (linearResult.sort().join(',') === treeResult.sort().join(',')) {
+    //     console.log("match");
+    // } else {
+    //     console.log(linearResult);
+    //     console.log(treeResult);
+    //     console.log(tree.toString());
+    //     console.log(tree.tree);
+    // }
     // ================================================================
     
     var renderLoop = () => {

@@ -5,6 +5,8 @@
 import { stringFormat, clampBox } from "./utils.js";
 
 export {
+    waitForDone,
+
     setupMarchModule, 
     setupMarch, 
     march, 
@@ -732,6 +734,7 @@ async function setupMarchModule() {
     }
 
     marchData.buffers.readBuffer = device.createBuffer({
+        label: "read buffer",
         size: 7776 * Uint32Array.BYTES_PER_ELEMENT,
         usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
     })
@@ -749,10 +752,16 @@ async function setupMarchModule() {
     marchData.pipelines.transformVerts = createTransformVertsPipeline();
 }
 
+async function waitForDone() {
+    await device.queue.onSubmittedWorkDone();
+    return;
+}
+
 function createGlobalBuffers() {
     // set the various tables needed
     // this global table buffer will be copied for each data object
     var tableBuffer = device.createBuffer({
+        label: "global table buffer",
         size: tablesLength * Uint32Array.BYTES_PER_ELEMENT,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
         mappedAtCreation: true
@@ -772,6 +781,7 @@ function createGlobalBuffers() {
     marchData.buffers.tables = tableBuffer;
     
     var readBuffer = device.createBuffer({
+        label: "global read buffer 2",
         size: 64 * Uint32Array.BYTES_PER_ELEMENT,
         usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
     });
@@ -910,6 +920,7 @@ function createBindGroups(dataObj) {
     // data buffer
     {
         var dataBuffer = device.createBuffer({
+            label: dataObj.id + ": data buffer",
             size: 48 + Math.ceil((dataObj.volume * 4/packing)/4)*4,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
             mappedAtCreation: true
@@ -953,6 +964,7 @@ function createBindGroups(dataObj) {
     {
         // copy the table buffer over
         var tablesBuffer = device.createBuffer({
+            label: dataObj.id + ": copy of table buffer",
             size: tablesLength * Uint32Array.BYTES_PER_ELEMENT,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
         });
@@ -967,6 +979,7 @@ function createBindGroups(dataObj) {
     // other buffers
     {
         var marchVarsBuffer = device.createBuffer({
+            label: dataObj.id + ": march vars buffer",
             size: Float32Array.BYTES_PER_ELEMENT + 3*Uint32Array.BYTES_PER_ELEMENT,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
         });
@@ -977,20 +990,30 @@ function createBindGroups(dataObj) {
         const offsetTotalsBufferLength = 2 + WGPrefixSumCount*2;
         
         var vertexOffsetTotalsBuffer = device.createBuffer({
+            label: dataObj.id + ": vert off totals buffer",
             size: offsetTotalsBufferLength * Uint32Array.BYTES_PER_ELEMENT,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
         });
         var indexOffsetTotalsBuffer = device.createBuffer({
+            label: dataObj.id + ": ind off totals buffer",
             size: offsetTotalsBufferLength * Uint32Array.BYTES_PER_ELEMENT,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
         });
     
         var bufferOffsetBuffer = device.createBuffer({
+            label: dataObj.id + ": buffer offset buffer",
             size: 1 * Uint32Array.BYTES_PER_ELEMENT,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
         });
 
         var countReadBuffer = device.createBuffer({
+            label: dataObj.id + ": count read buffer",
+            size: 2 * Uint32Array.BYTES_PER_ELEMENT,
+            usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+        })
+
+        var fineCountReadBuffer = device.createBuffer({
+            label: dataObj.id + ": fine count read buffer",
             size: 2 * Uint32Array.BYTES_PER_ELEMENT,
             usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
         })
@@ -1000,6 +1023,7 @@ function createBindGroups(dataObj) {
         dataObj.marchData.buffers.indexOffsetTotals = indexOffsetTotalsBuffer;
         dataObj.marchData.buffers.bufferOffset = bufferOffsetBuffer;
         dataObj.marchData.buffers.countReadBuffer = countReadBuffer;
+        dataObj.marchData.buffers.fineCountReadBuffer = fineCountReadBuffer;
 
         dataObj.marchData.bindGroups.marchVars = device.createBindGroup({
             layout: marchData.bindGroupLayouts.enumerate[1],
@@ -1030,6 +1054,7 @@ function createBindGroups(dataObj) {
     if (dataObj.structuredGrid) {
         // need to load the point positions as well
         var pointsBuffer = device.createBuffer({
+            label: dataObj.id + ": points buffer",
             size: dataObj.volume*3 * 4,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
             mappedAtCreation: true
@@ -1268,14 +1293,17 @@ function createTransformVertsPipeline() {
 
 function createMarchOutputBindGroup(vertNum, indexNum, dataObj) {
     var marchVertBuffer = device.createBuffer({
+        label: dataObj.id + ": vert out buffer",
         size: 3 * vertNum * Float32Array.BYTES_PER_ELEMENT,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.VERTEX
     }); 
     var marchNormalBuffer = device.createBuffer({
+        label: dataObj.id + ": normal out buffer",
         size: 3 * vertNum * Float32Array.BYTES_PER_ELEMENT,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.VERTEX
     });
     var marchIndexBuffer = device.createBuffer({
+        label: dataObj.id + ": index out buffer",
         size: indexNum * Uint32Array.BYTES_PER_ELEMENT,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.INDEX
     });
@@ -1312,14 +1340,17 @@ function createMarchOutputBindGroup(vertNum, indexNum, dataObj) {
 
 function createMarchFineOutputBindGroup(vertNum, indexNum, dataObj) {
     var marchVertBuffer = device.createBuffer({
+        label: dataObj.id + ": fine vert out buffer",
         size: 3 * vertNum * Float32Array.BYTES_PER_ELEMENT,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.VERTEX
     }); 
     var marchNormalBuffer = device.createBuffer({
+        label: dataObj.id + ": fine normal out buffer",
         size: 3 * vertNum * Float32Array.BYTES_PER_ELEMENT,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.VERTEX
     });
     var marchIndexBuffer = device.createBuffer({
+        label: dataObj.id + ": fine index out buffer",
         size: indexNum * Uint32Array.BYTES_PER_ELEMENT,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.INDEX
     });
@@ -1370,11 +1401,13 @@ function createOffsetBindGroups(dataObj) {
     //console.log("WGCount: "+ WGCount.val);
     
     var vertexOffsetBuffer = device.createBuffer({
+        label: dataObj.id + ": vert offset buffer",
         size: offsetBufferLength * Uint32Array.BYTES_PER_ELEMENT,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
     });
     
     var indexOffsetBuffer = device.createBuffer({
+        label: dataObj.id + ": index offset buffer",
         size: offsetBufferLength * Uint32Array.BYTES_PER_ELEMENT,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
     });
@@ -1544,7 +1577,7 @@ async function getMarchCounts(dataObj, threshold) {
             passEncoder5.end();
         }
 
-        await device.queue.onSubmittedWorkDone();
+        //await device.queue.onSubmittedWorkDone();
         device.queue.submit([commandEncoder.finish()]);
 
         // await readBuffer.mapAsync(GPUMapMode.READ, 0, 4*elems)
@@ -1697,6 +1730,8 @@ async function march(dataObj, meshObj, threshold) {
 
     device.queue.submit([commandEncoder.finish()]);
 
+    //await device.queue.onSubmittedWorkDone();
+
     // readBuffer.mapAsync(GPUMapMode.READ, 0, 7776*4).then(() => {
     //     var offsets = new Uint32Array(readBuffer.getMappedRange(0, 7776*4)); 
     //     var log = false;
@@ -1765,6 +1800,7 @@ function setupmarchFine(dataObj) {
     // create data buffer
     {
         var dataBuffer = device.createBuffer({
+            label: dataObj.id + ": fine data buffer",
             size: 32 + Math.ceil((dataObj.fineData.length * 4/packing)/4)*4,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
             mappedAtCreation: true
@@ -1797,6 +1833,7 @@ function setupmarchFine(dataObj) {
         dataBuffer.unmap();
 
         var activeBlocksBuffer = device.createBuffer({
+            label: dataObj.id + ": active blocks buffer",
             size: 4*Math.ceil(dataObj.activeBlocks.length/4)*4,
             usage: GPUBufferUsage.STORAGE,
             mappedAtCreation: true
@@ -1807,6 +1844,7 @@ function setupmarchFine(dataObj) {
 
         // create and set the locations buffer too
         var blockLocationsBuffer = device.createBuffer({
+            label: dataObj.id + ": block locations buffer",
             size: 4*Math.ceil(dataObj.blockLocations.length/4)*4,
             usage: GPUBufferUsage.STORAGE,
             mappedAtCreation: true
@@ -1850,11 +1888,13 @@ function setupmarchFine(dataObj) {
         const offsetBufferLength = Math.ceil(dataObj.activeBlocks.length/(WGPrefixSumCount*2)) * WGPrefixSumCount*2;
         
         var vertexOffsetBuffer = device.createBuffer({
+            label: dataObj.id + ": fine vert offset buffer",
             size: offsetBufferLength * Uint32Array.BYTES_PER_ELEMENT,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
         });
         
         var indexOffsetBuffer = device.createBuffer({
+            label: dataObj.id + ": fine index offset buffer",
             size: offsetBufferLength * Uint32Array.BYTES_PER_ELEMENT,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
         });
@@ -1874,7 +1914,7 @@ function setupmarchFine(dataObj) {
                 {
                     binding: 1,
                     resource: {
-                        buffer: marchData.buffers.vertexOffsetTotals
+                        buffer: dataObj.marchData.buffers.vertexOffsetTotals
                     }
                 }
             ]
@@ -1892,7 +1932,7 @@ function setupmarchFine(dataObj) {
                 {
                     binding: 1,
                     resource: {
-                        buffer: marchData.buffers.indexOffsetTotals
+                        buffer: dataObj.marchData.buffers.indexOffsetTotals
                     }
                 }
             ]
@@ -1958,8 +1998,8 @@ async function marchFine(dataObj, meshObj, threshold) {
 
     // prefix sum pass ===================================================================
     const offsetTotalsBufferLength = 2 + WGPrefixSumCount*2;
-    device.queue.writeBuffer(marchData.buffers.vertexOffsetTotals, 0, new Uint32Array(offsetTotalsBufferLength));
-    device.queue.writeBuffer(marchData.buffers.indexOffsetTotals, 0, new Uint32Array(offsetTotalsBufferLength));
+    device.queue.writeBuffer(dataObj.marchData.buffers.vertexOffsetTotals, 0, new Uint32Array(offsetTotalsBufferLength));
+    device.queue.writeBuffer(dataObj.marchData.buffers.indexOffsetTotals, 0, new Uint32Array(offsetTotalsBufferLength));
     
     // prefix sum on verts
     // starts as total number of values in totals
@@ -1973,10 +2013,10 @@ async function marchFine(dataObj, meshObj, threshold) {
     //                  number of rounds to do
     for (let i = 0; i < numBlocks/(WGPrefixSumCount*2); i++) {
         //console.log("round " + i)
-        device.queue.writeBuffer(marchData.buffers.bufferOffset, 0, Uint32Array.from([OffsetIntoOffsetBuffer]));
+        device.queue.writeBuffer(dataObj.marchData.buffers.bufferOffset, 0, Uint32Array.from([OffsetIntoOffsetBuffer]));
         if (i > 0) {
-            device.queue.writeBuffer(marchData.buffers.vertexOffsetTotals, 2*4, totalsClearArray);
-            device.queue.writeBuffer(marchData.buffers.indexOffsetTotals, 2*4, totalsClearArray);
+            device.queue.writeBuffer(dataObj.marchData.buffers.vertexOffsetTotals, 2*4, totalsClearArray);
+            device.queue.writeBuffer(dataObj.marchData.buffers.indexOffsetTotals, 2*4, totalsClearArray);
         }
         
         thisNumBlocks = Math.max(2, Math.min(WGPrefixSumCount*2, numBlocks-OffsetIntoOffsetBuffer));
@@ -1992,7 +2032,7 @@ async function marchFine(dataObj, meshObj, threshold) {
         var passEncoder2 = commandEncoder.beginComputePass();
         passEncoder2.setPipeline(marchData.pipelines.prefix[0]);
         passEncoder2.setBindGroup(0, dataObj.marchData.bindGroups.vertexOffsetFine);
-        passEncoder2.setBindGroup(1, marchData.bindGroups.bufferOffset);
+        passEncoder2.setBindGroup(1, dataObj.marchData.bindGroups.bufferOffset);
         passEncoder2.dispatchWorkgroups(thisNumBlocks);
         passEncoder2.end();
 
@@ -2000,7 +2040,7 @@ async function marchFine(dataObj, meshObj, threshold) {
         var passEncoder3 = commandEncoder.beginComputePass();
         passEncoder3.setPipeline(marchData.pipelines.prefix[0]);
         passEncoder3.setBindGroup(0, dataObj.marchData.bindGroups.indexOffsetFine);
-        passEncoder3.setBindGroup(1, marchData.bindGroups.bufferOffset);
+        passEncoder3.setBindGroup(1, dataObj.marchData.bindGroups.bufferOffset);
 
         passEncoder3.dispatchWorkgroups(thisNumBlocks);
         passEncoder3.end();
@@ -2009,7 +2049,7 @@ async function marchFine(dataObj, meshObj, threshold) {
             var passEncoder4 = commandEncoder.beginComputePass();
             passEncoder4.setPipeline(marchData.pipelines.prefix[1]);
             passEncoder4.setBindGroup(0, dataObj.marchData.bindGroups.vertexOffsetFine);
-            passEncoder4.setBindGroup(1, marchData.bindGroups.bufferOffset);
+            passEncoder4.setBindGroup(1, dataObj.marchData.bindGroups.bufferOffset);
 
             passEncoder4.dispatchWorkgroups(1);
             passEncoder4.end();
@@ -2017,13 +2057,13 @@ async function marchFine(dataObj, meshObj, threshold) {
             var passEncoder5 = commandEncoder.beginComputePass();
             passEncoder5.setPipeline(marchData.pipelines.prefix[1]);
             passEncoder5.setBindGroup(0, dataObj.marchData.bindGroups.indexOffsetFine);
-            passEncoder5.setBindGroup(1, marchData.bindGroups.bufferOffset);
+            passEncoder5.setBindGroup(1, dataObj.marchData.bindGroups.bufferOffset);
 
             passEncoder5.dispatchWorkgroups(1);
             passEncoder5.end();
         }
 
-        await device.queue.onSubmittedWorkDone();
+        //await device.queue.onSubmittedWorkDone();
         device.queue.submit([commandEncoder.finish()]);
 
         OffsetIntoOffsetBuffer += thisNumBlocks;
@@ -2031,19 +2071,19 @@ async function marchFine(dataObj, meshObj, threshold) {
     // copy values into correct buffers
     commandEncoder = await device.createCommandEncoder();
 
-    commandEncoder.copyBufferToBuffer(marchData.buffers.vertexOffsetTotals, 4, marchData.buffers.countReadBuffer, 0, 4);
-    commandEncoder.copyBufferToBuffer(marchData.buffers.indexOffsetTotals, 4, marchData.buffers.countReadBuffer, 4, 4);
+    commandEncoder.copyBufferToBuffer(dataObj.marchData.buffers.vertexOffsetTotals, 4, dataObj.marchData.buffers.fineCountReadBuffer, 0, 4);
+    commandEncoder.copyBufferToBuffer(dataObj.marchData.buffers.indexOffsetTotals, 4, dataObj.marchData.buffers.fineCountReadBuffer, 4, 4);
 
     device.queue.submit([commandEncoder.finish()]);
     
     //device.queue.submit(prefixSumCommands);
     
-    await marchData.buffers.countReadBuffer.mapAsync(GPUMapMode.READ, 0, 8) 
-    const lengths = new Uint32Array(marchData.buffers.countReadBuffer.getMappedRange());
+    await dataObj.marchData.buffers.fineCountReadBuffer.mapAsync(GPUMapMode.READ, 0, 8) 
+    const lengths = new Uint32Array(dataObj.marchData.buffers.fineCountReadBuffer.getMappedRange());
     var vertNum = lengths[0];
     var indNum = lengths[1];
     //console.log("fine verts + inds:", vertNum, indNum);  
-    marchData.buffers.countReadBuffer.unmap();
+    dataObj.marchData.buffers.fineCountReadBuffer.unmap();
 
 
     // march pass =====================================================================================
@@ -2141,6 +2181,7 @@ async function setupRenderer(canvas) {
     // TODO: seperate pipeline for rendering views and copying to main texture
 
     uniformBuffer = device.createBuffer({
+        label: "uniform buffer",
         size: 16*2*Float32Array.BYTES_PER_ELEMENT,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
@@ -2491,7 +2532,11 @@ async function renderView(ctx, projMat, modelViewMat, box, meshes, points) {
             clampBox(box, ctx.canvas.getBoundingClientRect());
             passEncoder.setScissorRect(box.left, box.top, box.width, box.height);
 
+            if (meshObj.buffers.vertex.state != undefined) {
+                console.log(meshObj.buffers.vertex.state);
+            }
             if (points) {
+                // check if the buffers are not destroyed
                 passEncoder.setPipeline(pointsRenderPipeline);
                 passEncoder.setVertexBuffer(0, meshObj.buffers.vertex);
                 passEncoder.setVertexBuffer(1, meshObj.buffers.normal);
@@ -2513,8 +2558,8 @@ async function renderView(ctx, projMat, modelViewMat, box, meshes, points) {
         device.queue.writeBuffer(uniformBuffer, 0, new Float32Array([...projMat, ...modelViewMat]))
         device.queue.submit([commandEncoder.finish()]);
     }
-
     depthStencilTexture.destroy();
+    //await device.queue.onSubmittedWorkDone();
     //console.log("rendered")
     
 }

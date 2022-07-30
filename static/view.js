@@ -196,7 +196,7 @@ var viewManager = {
             // timer itself
             timer: undefined,
             // time to fire in ms
-            duration: 1000
+            duration: 10
         }
         this.box = {};
         this.init = function() {
@@ -216,11 +216,12 @@ var viewManager = {
             // only update the mesh if marching is needed
             if (this.renderMode == renderModes.DATA_POINTS) return;
 
-            timer.start("march");
+            
             // stops the fine timer running if it is
             clearTimeout(this.fineTimer.timer)
             if (this.data.initialised){
                 if(!this.updating) {
+                    timer.start("march");
                     this.updating = true;
                     this.threshold = val;
                     const t0 = performance.now();
@@ -229,9 +230,10 @@ var viewManager = {
                     if (buffersUpdateNeeded()) this.updateBuffers();
                     //view.timeLogs.push([this.mesh.verts.length/3 | this.mesh.vertNum, time]);
                     this.updating = false;
+                    timer.stop("march", this.getTotalVerts());
                 };
             };
-            timer.stop("march", this.getTotalVerts());
+            
         }
         this.transferPointsToMesh = function() {
             if (this.data.multiBlock) {
@@ -317,6 +319,7 @@ var viewManager = {
             // find place for indices length
 
             if (this.data.initialised) {
+                timer.start("render");
                 if (this.renderMode == renderModes.ISO_SURFACE ) {
                     //console.log("iso");
                     renderView(gl, this.camera.projMat, this.camera.getModelViewMat(), this.getBox(), this.meshes, false);
@@ -324,6 +327,7 @@ var viewManager = {
                     //console.log("points");
                     renderView(gl, this.camera.projMat, this.camera.getModelViewMat(), this.getBox(), this.meshes, true);
                 }
+                timer.stop("render", this.getTotalVerts());
             };
         }
         this.delete = function() {
@@ -337,3 +341,43 @@ var viewManager = {
         }
     }
 }
+
+// flow for marching fine data:
+
+// the threshold value is chosen
+// check if the fine data at the threshold is loaded in march instance
+// if not:
+//      check if it is loaded in the [[fine data storage]]
+//      if not:
+//          load the data at the threshold value from the server
+// continue to march the data ####
+//
+// the [[fine data]] instance manage the data it contains so that
+// when the march completes:
+//      expand the data that is loaded in the march instance
+
+
+// block memory management:
+
+// need to remain within budget at all times
+// budget for march instance can be ascertained at init
+// budget for fine data shared among all of the fine data users
+// always keep a track of the range/ranges of data loaded
+//      in terms of threshold values
+// assumes system block storage > march instance block storage
+
+// to expand blocks stored:
+// work from the threshold value always
+// gradually increase the size of the range until the number of blocks fills the allocated memory
+//      start by increasing range by small amount (~1% of total value range)
+//      increase is symmetric either side of 
+//      query datastructure so see how many blocks lie exclusively in this new range
+//      gradually expand the search - the velocity (Δ window size) given by a pid loop
+//      the amount of space left is input to pid
+//      stop when total > allowed and use prev
+//      also keep a track of when the range is 
+// look for any intercept with the range that is currently stored
+// can keep the blocks that are still part of this new range
+// remove those that aren't part of the new range
+// request the new blocks 
+

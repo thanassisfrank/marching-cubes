@@ -140,7 +140,7 @@ const child = {
 }
 
 // interval tree data structure
-export function IntervalTree(range) {
+export function OldIntervalTree(range) {
     this.range = range;
     // the tree consists of connected nodes each of form
     // {
@@ -260,9 +260,113 @@ export function IntervalTree(range) {
         }
         return out;
     }
-    this.queryRange =  function() {
-        let currNode = this.tree;
+    this.queryRange =  function(range) {
+        let out = {};
+        var addToOut = (val) => {
+            if (!out[val]) {
+                out[val] = true;
+                return true;
+            } 
+            return false;
+        };
+        var completeLeft = false;
+        var completeRight = false;
+
+        // find all the intervals where:
+        // > left >= query left or right <= query right
+        // i.e.
+        // > has to contain one of the endpoints or be in-between
         
+        // look for intervals that intersect with the left end
+        let currNode = this.tree;
+        var qVal = range[0];
+        while (!completeLeft) {
+            if (qVal == currNode.val) {
+                for (let entry of currNode.al.map((v, i, a) => v[2])) {
+                    addToOut(entry);
+                }
+                completeLeft = true;
+            } else if (qVal > currNode.val) {
+                // look through dr list
+                for (let i = 0; i < currNode.dr.length; i++) {
+                    if (currNode.dr[i][1] >= qVal) {
+                        addToOut(currNode.dr[i][2]);
+                    } else {
+                        break;
+                    }
+                }
+                if (currNode.right != null) {
+                    // move to right child
+                    currNode = currNode.right;
+                } else {
+                    // no right child, done
+                    completeLeft = true;
+                }
+            } else {
+                // look through al list
+                for (let i = 0; i < currNode.al.length; i++) {
+                    if (currNode.al[i][0] <= qVal) {
+                        addToOut(currNode.al[i][2]);
+                    } else {
+                        break;
+                    }
+                }
+                if (currNode.left != null) {
+                    // move to left child
+                    currNode = currNode.left;
+                } else {
+                    // no left child, done
+                    completeLeft = true;
+                }
+            }
+        }
+        // look for intervals that intersect the right end
+        currNode = this.tree;
+        qVal = range[1];
+        while (!completeRight) {
+            if (qVal == currNode.val) {
+                for (let entry of currNode.al.map((v, i, a) => v[2])) {
+                    addToOut(entry);
+                }
+                completeRight = true;
+            } else if (qVal > currNode.val) {
+                // look through dr list
+                for (let i = 0; i < currNode.dr.length; i++) {
+                    if (currNode.dr[i][1] >= qVal) {
+                        addToOut(currNode.dr[i][2]);
+                    } else {
+                        break;
+                    }
+                }
+                if (currNode.right != null) {
+                    // move to right child
+                    currNode = currNode.right;
+                } else {
+                    // no right child, done
+                    completeRight = true;
+                }
+            } else {
+                // look through al list
+                for (let i = 0; i < currNode.al.length; i++) {
+                    if (currNode.al[i][0] <= qVal) {
+                        addToOut(currNode.al[i][2]);
+                    } else {
+                        break;
+                    }
+                }
+                if (currNode.left != null) {
+                    // move to left child
+                    currNode = currNode.left;
+                } else {
+                    // no left child, done
+                    completeRight = true;
+                }
+            }
+        }
+        // add all the ones inbetween
+
+
+        return Object.keys(out);
     }
     this.getOrCreateLeftChild = function(node) {
         if (node.left) return node.left;
@@ -327,6 +431,278 @@ export function IntervalTree(range) {
     }
 }
 
+// implementation modified from https://www.geeksforgeeks.org/interval-tree/
+// and https://www.geeksforgeeks.org/avl-tree-set-1-insertion/
+export function IntervalTree() {
+    // the tree consists of connected nodes each of form
+    // {
+    //     parent: node             reference to its parent node
+    //     range: [Number, Number]  the interval of this node
+    //     min: Number              the min low value in this node's subtree
+    //     max: Number              the max high value in this node's subtree
+    //     data: Any                stored data for this node
+    //     left: node               the left child node
+    //     right: node              the right child node
+    // }
+    this.tree = null;
+    this.leaf = (parent, range, data) => {
+        return {
+            parent: parent,
+            range: range,
+            min: range[0],
+            max: range[1],
+            data: data,
+            left: null,
+            right: null,
+            height: 1
+        }
+    }
+    this.getHeight = (node) => {
+        if (node) return node.height;
+        return 0;
+    }
+    this.getBalance = function(node) {
+        if (!node) return 0;
+        return this.getHeight(node.left) - this.getHeight(node.right);
+    }
+
+    this.rightRotate = function(y) {
+        var x = y.left;
+        var T2 = x.right;
+    
+        // Perform rotation
+        x.right = y;
+        y.left = T2;
+    
+        // Update heights
+        y.height = Math.max(this.getHeight(y.left), this.getHeight(y.right)) + 1;
+        x.height = Math.max(this.getHeight(x.left), this.getHeight(x.right)) + 1;
+
+        //update the min/max too
+        y.max = Math.max(y.max, y.left?.max | 0, y.right?.max | 0);
+        y.min = Math.min(y.min, y.left?.min | 0, y.right?.min | 0);
+        x.max = Math.max(x.max, x.left?.max | 0, x.right?.max | 0);
+        x.min = Math.min(x.min, x.left?.min | 0, x.right?.min | 0);
+    
+        // Return new root
+        return x;
+    }
+    this.leftRotate = function(x) {
+        var y = x.right;
+        var T2;
+        try {
+            T2 = y.left;
+        } catch (e) {
+            console.log(x);
+        }
+    
+        // Perform rotation
+        y.left = x;
+        x.right = T2;
+    
+        // Update heights
+        x.height = Math.max(this.getHeight(x.left), this.getHeight(x.right)) + 1;
+        y.height = Math.max(this.getHeight(y.left), this.getHeight(y.right)) + 1;
+
+        //update the min/max too
+        y.max = Math.max(y.max, y.left?.max | 0, y.right?.max | 0);
+        y.min = Math.min(y.min, y.left?.min | 0, y.right?.min | 0);
+        x.max = Math.max(x.max, x.left?.max | 0, x.right?.max | 0);
+        x.min = Math.min(x.min, x.left?.min | 0, x.right?.min | 0);
+    
+        // Return new root
+        return y;
+    }
+    // currently this is just a bst insertion
+    // could be converted to an avl tree to maintain balance
+    this.insertOld = function(range, data) {
+        if (this.tree == null) {
+            // first node in tree
+            this.tree = this.leaf(null, range, data);
+            return;
+        }
+
+        // insert node in correct place
+        let currentNode = this.tree;
+        var inserted = false;
+        while (!inserted) {
+            // update max of currentNode
+            currentNode.max = Math.max(currentNode.max, range[1]);
+            currentNode.min = Math.min(currentNode.min, range[0]);
+            if (currentNode.range[0] > range[0]) {
+                // go to left child
+                if (currentNode.left != null) {
+                    currentNode = currentNode.left;
+                } else {
+                    currentNode.left = this.leaf(currentNode, range, data);
+                    inserted = true;
+                }
+            } else {
+                // go to right child
+                if (currentNode.right != null) {
+                    currentNode = currentNode.right;
+                } else {
+                    currentNode.right = this.leaf(currentNode, range, data);
+                    inserted = true;
+                }
+            }
+        }
+    }
+
+    this.insert = function(range, data) {
+        this.tree = this.insertNode(this.tree, this.leaf(null, range, data));
+    }
+
+    // insert the given new node into the subtree of the node somewhere
+    this.insertNode = function(node, newNode) {
+        /* 1. Perform the normal BST insertion */
+        if (!node) return newNode;
+        
+        node.max = Math.max(node.max, newNode.range[1]);
+        node.min = Math.min(node.min, newNode.range[0]);
+    
+        if (newNode.range[0] < node.range[0]) {
+            node.left = this.insertNode(node.left, newNode);
+        } else {
+            node.right = this.insertNode(node.right, newNode);
+        }
+    
+        /* 2. Update height of this ancestor node */
+        node.height = 1 + Math.max(this.getHeight(node.left), this.getHeight(node.right));
+    
+        /* 3. Get the balance factor of this ancestor
+            node to check whether this node became
+            unbalanced */
+        const balance = this.getBalance(node);
+    
+        // If this node becomes unbalanced, then
+        // there are 4 cases
+    
+        // Left Left Case
+        if (balance > 1 && newNode.range[0] < node.left.range[0]) {
+            return this.rightRotate(node);
+        }
+    
+        // Right Right Case
+        if (balance < -1 && newNode.range[0] >= node.right.range[0]){
+            return this.leftRotate(node);
+        }
+        // Left Right Case
+        if (balance > 1 && newNode.range[0] >= node.left.range[0]) {
+            node.left = this.leftRotate(node.left);
+            return this.rightRotate(node);
+        }
+    
+        // Right Left Case
+        if (balance < -1 && newNode.range[0] < node.right.range[0]) {
+            node.right = this.rightRotate(node.right);
+            return this.leftRotate(node);
+        }
+    
+        /* return the (unchanged) node pointer */
+        return node;
+    }
+
+    // checks whether there is overlap between two ranges
+    // exclusive applies to the endpoints of range 1
+    // if exclusive is true in either slot, overlap will be false if range2 contains that endpoint
+    // of range 1
+    this.overlap = (range1, range2, exclusive) => {
+        // this is the base case that all overlaps satisfy
+        if (range1[0] <= range2[1] && range2[0] <= range1[1]) {
+            var satisfies = [true, true];
+            if (exclusive[0] && range2[0] <= range1[0]) satisfies[0] = false;
+            if (exclusive[1] && range2[1] >= range1[1]) satisfies[1] = false;
+
+            return satisfies[0] && satisfies[1];
+        }
+        return false;
+    }
+    //
+    this.queryRange = function(range, exclusive = [false, false]) {
+        var out = [];
+        if (this.tree == null) {
+            return out;
+        }
+        this.findOverlaps(this.tree, range, exclusive, out);
+        return out;
+    }
+    // traverse tree, finding all the ranges that fit (recursive)
+    this.findOverlaps = function(currentNode, range, exclusive, out) {
+        if (this.overlap(range, currentNode.range, exclusive)) {
+            out.push(currentNode.data);
+        }
+        // go to left if can
+        if (currentNode.left != null && currentNode.left.max >= range[0]) {
+            this.findOverlaps(currentNode.left, range, exclusive, out);
+        }
+        // then go right if you can
+        if (currentNode.right != null && currentNode.right.min <= range[1]) {
+            this.findOverlaps(currentNode.right, range, exclusive, out);
+            
+        }
+    }
+    this.queryVal = function(val) {
+        return this.queryRange([val, val], [false, false]);
+    }
+
+    // returns string like
+    // `
+    // A [0.3, 2.4] + B [0.4, 0.6] + E [1.2, 4.5]
+    //                             + F [0.3, 3.2]
+    //              + C [4.0, 10.] + D [3.1, 7.2] 
+    // `                           
+    this.toString = function() {
+        var out = [];
+        var valLength = 1; // in chars
+        var rangeLength = 2*valLength + 4; // in chars
+        var currNode = this.tree;
+        var currLine = 0;
+        var currDepth = 0;
+        // go 
+        this.addNodeToString(this.tree, out, currDepth, valLength, rangeLength, true);
+        
+
+        return out.join("");
+    }
+    this.addNodeToString = function(node, out, currDepth, valLength, rangeLength, isRight) {
+        // add the current node
+        var thisString = node.data.toString()[0] + " " + this.stringRange(node.range, valLength);
+        if (currDepth > 0) {
+            thisString = " + " + thisString;
+        }
+        if (!isRight) {
+            // add padding and pipes
+            for (let i = 0; i < currDepth; i++) {
+                if (i > 0) thisString = "   " + thisString;
+                thisString = " ".repeat(rangeLength + 2) + thisString;
+            }
+            // as newline
+            thisString = "\n" + thisString;
+        }
+        out.push(thisString);
+
+        // go right if you can
+        if (node.right != null) {
+            this.addNodeToString(node.right, out, currDepth + 1, valLength, rangeLength, true);
+            
+        }
+        // then go left
+        if (node.left != null) {
+            this.addNodeToString(node.left, out, currDepth + 1, valLength, rangeLength, false);
+        }
+
+    }
+    this.stringRange = function(range, valLength) {
+        return "[" 
+            + range[0].toString().slice(0, valLength)
+            + ", "
+            + range[1].toString().slice(0, valLength)
+            + "]";
+            
+    }
+}
+
 // class for keeping a track of times (for benchmarking)
 function Timer() {
     this.maxSamples = 600;
@@ -372,11 +748,13 @@ function Timer() {
     };
     this.calculateAvg = function() {
         for (let key in this.times) {
-            const total = this.times[key].samples.reduce((a,b)=> a+b[0]);
             const num = this.times[key].samples.length
-            //console.log(total, num)
-            this.times[key].avg = total/num;
-            this.times[key].running = false;
+            if (num == 1) {
+                this.times[key].avg = this.times[key].samples[0][0];
+            } else {
+                const total = this.times[key].samples.reduce((a,b) => a+b[0], 0);
+                this.times[key].avg = total/num;
+            }
         }
     };
     this.calculateVar = function() {
@@ -388,7 +766,7 @@ function Timer() {
                 continue;
             }
             const m = this.times[key].avg;
-            const sum = this.times[key].samples.reduce((a,b)=> a + Math.pow(b[0] - m, 2));
+            const sum = this.times[key].samples.reduce((a,b)=> a + Math.pow(b[0] - m, 2), 0);
             this.times[key].var = sum/num;
             this.times[key].stdDev = Math.pow(sum/num, 0.5);
 
@@ -400,14 +778,18 @@ function Timer() {
         console.table({...this.times, empty: {avg:undefined}}, ["avg", "stdDev"]);
     }
     this.logSamples = function(key) {
+        if (!this.times[key]) return false;
         console.table(this.times[key].samples);
+        return this.times[key].samples.length;
     }
     this.copySamples = function(key) {
+        if (!this.times[key]) return false;
         let str = "";
         for (let sample of this.times[key].samples) {
             str += sample[1] + "\t" + sample[0] + "\n";
         }
         navigator.clipboard.writeText(str);
+        return this.times[key].samples.length;
     }
 }
 

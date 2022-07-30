@@ -3,7 +3,7 @@
 
 import {VecMath} from "./VecMath.js";
 import {vec3} from "https://cdn.skypack.dev/gl-matrix";
-import { newId, DATA_TYPES, xyzToA, parseXML } from "./utils.js";
+import { newId, DATA_TYPES, xyzToA, parseXML, IntervalTree, timer } from "./utils.js";
 import { decompressB64Str, getNumPiecesFromVTS, getDataNamesFromVTS, getPointsFromVTS, getExtentFromVTS, getPointDataFromVTS, getDataLimitsFromVTS} from "./dataUnpacker.js"
 import { cleanupMarchData } from "./march.js";
 
@@ -407,6 +407,12 @@ var dataManager = {
             const limitsResponse = await fetch(pathSplit[0] + "_limits." + pathSplit[1]);
             const limitsBuffer = await limitsResponse.arrayBuffer();
             this.blockLimits = new DATA_TYPES[config.dataType](limitsBuffer)
+            
+            // create an interval tree to contain the limits
+            this.blocksIntervalTree = new IntervalTree();
+            for (let i = 0; i < this.blockLimits.length; i += 2) {
+                this.blocksIntervalTree.insert([this.blockLimits[i], this.blockLimits[i + 1]], i/2);
+            }
 
             // console.log(this.blockLimits)
 
@@ -477,24 +483,39 @@ var dataManager = {
             console.log(this.fineData.length/64);
         }
         
+        // same as above but searched for the cut blocks on client
         this.getFineDataBlocks = async function(threshold) {
             // entries in active blocks gives the id of the block in the same position in this.data
             this.activeBlocks = [];
+
+            
+
+            timer.start("linear")
             // block locations is a list of all blocks and where they are in this.data if they are there
             var l, r;
             for (let i = 0; i < this.blockLimits.length/2; i++) {
                 l = this.blockLimits[2*i];
                 r = this.blockLimits[2*i + 1];
-                if (i == 16 + 24*8) console.log(l, r)
                 if (l <= threshold && r >= threshold ) {
                     this.blockLocations[i] = this.activeBlocks.length;
                     this.activeBlocks.push(i);
                 } else {
                     this.blockLocations[i] = -1;
                 }
-            }            
+            } 
+            timer.stop("linear", this.activeBlocks.length);
+
+            timer.start("interval Tree")
+            this.activeBlocks = this.blocksIntervalTree.queryVal(threshold);
+            timer.stop("interval Tree", this.activeBlocks.length);
+            this.blockLocations.fill(-1);
+            for (let i = 0; i < this.activeBlocks.length; i++) {
+                this.blockLocations[this.activeBlocks[i]] = i;
+            }
+
             this.fineData = await this.fetchBlocks(this.activeBlocks);
         }
+
         this.fetchBlocks = function(blocks) {
             const request = {
                 name: this.config.name,
@@ -576,6 +597,7 @@ var dataManager = {
             vec3.set(n, -dx, -dy, -dz);
             //vec3.normalize(n, n);
         };
+
         this.checkFine = async function() {
             var wrong = 0;
             var wrongCoords = {
