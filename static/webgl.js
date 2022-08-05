@@ -231,7 +231,7 @@ function clearScreen(gl) {
 var renderView = function(gl, projMat, modelViewMat, box, meshes, points) {
     gl.viewport(box.left, box.bottom, box.width, box.height);
     gl.scissor(box.left, box.bottom, box.width, box.height);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    //gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     gl.uniformMatrix4fv(
         programInfo.uniformLocations.projMat,

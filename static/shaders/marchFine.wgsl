@@ -173,10 +173,11 @@ fn main(
     // get the index in dataset and position of current block
     var thisIndex = activeBlocks.buffer[WGIndex];
     var thisBlockPos = posFromIndex(thisIndex, d.blocksSize);
+    var thisBlockLoc = u32(locations.buffer[thisIndex]);
 
 
     // first load all the required data into workgroup memory ===========================================================
-    var val = getVal(lid.x, lid.y, lid.z, WGIndex, packing);
+    var val = getVal(lid.x, lid.y, lid.z, thisBlockLoc, packing);
     blockData[lid.x][lid.y][lid.z] = val;
 
     // a vector that describes on what sides this thread has neighbouring blocks (if they exist)

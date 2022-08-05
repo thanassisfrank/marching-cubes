@@ -7,8 +7,9 @@ import {mat4} from 'https://cdn.skypack.dev/gl-matrix';
 
 import { meshManager } from "./mesh.js";
 import { cameraManager } from "./camera.js";
+import { marcherManager } from "./marcher.js";
 
-import {buffersUpdateNeeded, updateMeshBuffers, deleteBuffers, clearScreen, renderView} from "./render.js";
+import {clearScreen, renderView} from "./render.js";
 
 import { march, marchMulti, marchFine } from "./march.js";
 import { dataManager } from "./data.js";
@@ -30,30 +31,20 @@ var viewManager = {
     moreViewsAllowed: function() {
         return Object.keys(this.views).length < this.maxViews;
     },
-    createView: function(config) {
-        // check if it is going to be linked with another view object
-        // check what type of linking is required
-    
-        // FOR INITIAL IMPLEMENTATION: no linking is supported
+    createView: function(config) {    
         // some linking is working
     
         //check to see if there is already the max amount of views
-        if (!this.moreViewsAllowed()) return false;
+        if (!this.moreViewsAllowed()) {
+            console.log("sorry, max views reached");
+            return false;
+        }
     
         // check if the mesh, data and camera objects are supplied
-        var camera = config.camera;// || new Camera();
-        var meshes = config.meshes || [];
-        var data = config.data;// || new Data();
+        var camera = config.camera;
+        var data = config.data;
 
-        if (meshes.length < data.pieces.length) {
-            const x = meshes.length;
-            for (let i = x; i < data.pieces.length; i++) {
-                meshes.push(meshManager.createMesh());
-            }
-        } else if (!data.multiBlock && meshes.length == 0) {
-            meshes = [meshManager.createMesh()];
-        }
-        console.log(meshes);
+        var marcher = marcherManager.create(data); // FOR NOW CREATE NEW FOR EACH VIEW
         
 
         const modelMat = mat4.create();
@@ -65,21 +56,15 @@ var viewManager = {
         camera.setDist(1.5*data.maxSize*data.maxCellSize);
 
         // register a new user of the used objects
-        for (let mesh of meshes) {
-            meshManager.addUser(mesh);
-        }
         cameraManager.addUser(camera);
-        dataManager.addUser(data);
+        marcherManager.addUser(marcher);
 
 
         // generate id
         const id = newId(this.views);
-        var newView = new this.View(id, camera, data, meshes);
+        var newView = new this.View(id, camera, marcher, config.renderMode || renderModes.ISO_SURFACE, (data.limits[0] + data.limits[1])/2);
         this.createViewDOM(id, newView);
         this.views[id] = newView;
-        newView.renderMode = config.renderMode || renderModes.ISO_SURFACE;
-        newView.init();
-
         return newView;
     },
     createViewDOM: function(id, view) {
@@ -91,11 +76,11 @@ var viewManager = {
         var frame = viewContainer.getElementsByTagName("DIV")[0];
         var closeBtn = viewContainer.getElementsByTagName("BUTTON")[0];
 
-        slider.min = view.data.limits[0];//Math.max(view.data.limits[0], 0);
-        slider.max = view.data.limits[1];
-        slider.step = (view.data.limits[1] - view.data.limits[0]) / 200;
+        slider.min = view.marcher.data.limits[0];//Math.max(view.data.limits[0], 0);
+        slider.max = view.marcher.data.limits[1];
+        slider.step = (view.marcher.data.limits[1] - view.marcher.data.limits[0]) / 200;
 
-        slider.value = (view.data.limits[0] + view.data.limits[1]) / 2;
+        slider.value = (view.marcher.data.limits[0] + view.marcher.data.limits[1]) / 2;
 
         closeBtn.onclick = () => {
             this.deleteView(view);
@@ -180,118 +165,54 @@ var viewManager = {
             clearScreen(gl);
         }
     },
-    timeLogs: [],
-    View: function(id, camera, data, meshes) {
+    View: function(id, camera, marcher, renderMode, threshold) {
         this.id = id;
-        this.bufferId;
         this.camera = camera;
-        this.data = data;
-        this.meshes = meshes;
-        this.threshold = (this.data.limits[0] + this.data.limits[1])/2;
-        this.updating = false;
-        this.renderMode = renderModes.ISO_SURFACE;
+
+        // handles both data and meshes
+        this.marcher = marcher;
+
+        this.threshold = threshold;
+        this.renderMode = renderMode;
         // holds a timer that waits for a little while after the threshold has stopped changing
         // then generates a fine mesh
         this.fineTimer = {
             // timer itself
             timer: undefined,
             // time to fire in ms
-            duration: 10
+            duration: 1000
         }
         this.box = {};
         this.init = function() {
             // do the correct type of initialisation based upon the rendering mode
             if (this.renderMode == renderModes.DATA_POINTS) {
                 // transfer the points from the data object to the mesh
-                this.transferPointsToMesh();
-                this.updateBuffers()
+                this.marcher.transferPointsToMesh();
             } else if (this.renderMode == renderModes.ISO_SURFACE ||this.renderMode == renderModes.ISO_POINTS) {
                 this.updateThreshold(this.threshold);
             }            
-        }
-        this.getTotalVerts = function() {
-            return this.meshes.reduce((a,b) => a + b.vertsNum, 0);
-        }
+        }     
         this.updateThreshold = async function(val) {
+            this.threshold = val;
             // only update the mesh if marching is needed
             if (this.renderMode == renderModes.DATA_POINTS) return;
 
-            
             // stops the fine timer running if it is
-            clearTimeout(this.fineTimer.timer)
-            if (this.data.initialised){
-                if(!this.updating) {
-                    timer.start("march");
-                    this.updating = true;
-                    this.threshold = val;
-                    const t0 = performance.now();
-                    await this.generateIsoMesh();
-                    const time = performance.now()-t0;
-                    if (buffersUpdateNeeded()) this.updateBuffers();
-                    //view.timeLogs.push([this.mesh.verts.length/3 | this.mesh.vertNum, time]);
-                    this.updating = false;
-                    timer.stop("march", this.getTotalVerts());
-                };
-            };
             
-        }
-        this.transferPointsToMesh = function() {
-            if (this.data.multiBlock) {
-                for (let i = 0; i < this.data.pieces.length; i++) {
-                    this.meshes[i].verts = this.data.pieces[i].points;
-                    this.meshes[i].normals = new Float32Array(this.data.pieces[i].volume*3);
-                    this.meshes[i].vertsNum = this.data.pieces[i].volume;
-                }
-                
-            } else {
-                if (data.structuredGrid) {
-                    this.meshes[0].verts = this.data.points;
-                } else {
-                    this.meshes[0].verts = new Float32Array(this.data.volume*3);
-                    var index = 0;
-                    for (let i = 0; i < this.data.size[0]; i++) {
-                        for (let j = 0; j < this.data.size[1]; j++) {
-                            for (let k = 0; k < this.data.size[2]; k++) {
-                                this.meshes[0].verts[3*index + 0] = i;
-                                this.meshes[0].verts[3*index + 1] = j;
-                                this.meshes[0].verts[3*index + 2] = k;
-                                index++;
-                            }
-                        }
-                    }
-                    console.log("made points");
-                }
-                this.meshes[0].normals = new Float32Array(this.data.volume*3);
-                this.meshes[0].vertsNum = this.data.volume;
-            }
             
-        }
-        this.generateIsoMesh = async function() {
-            if (this.data.multiBlock) {
-                // doesnt support fine meshes for now
+            this.marcher.march(this.threshold);
 
-                await marchMulti(this.data.pieces, this.meshes, this.threshold);
-                
-            } else {
-                await march(this.data, this.meshes[0], this.threshold);
-                //console.log(this.meshes[0]);
+            if (this.marcher.data.complex) {
+                clearTimeout(this.fineTimer.timer);
+                //console.log("deleted:", this.fineTimer.timer)
 
-                if (this.data.complex) {
-                    var that = this;
-                    this.fineTimer.timer = setTimeout(async function() {
-                        console.log("march fine")
-                        await that.data.getFineDataBlocks(that.threshold);
-                        await marchFine(that.data, that.meshes[0], that.threshold);
-                    }, this.fineTimer.duration);
-                };
-            }         
-        }
-        this.updateBuffers = function() {
-            // console.log("oob");
-            for (let i = 0; i < this.meshes.length; i++) {
-                updateMeshBuffers(this.meshes[i]);
+                var that = this;
+
+                this.fineTimer.timer = setTimeout(() => {
+                    that.marcher.marchFine(that.threshold);
+                }, this.fineTimer.duration);
+                //console.log("created:",this.fineTimer.timer)
             }
-            
         }
         this.getFrameElem = function() {
             return get(this.id).children[0];
@@ -314,70 +235,19 @@ var viewManager = {
             return this.box;
         }
         this.render = function(gl) {
-            // call the function to render this view
-            // find place for model mat
-            // find place for indices length
-
-            if (this.data.initialised) {
-                timer.start("render");
-                if (this.renderMode == renderModes.ISO_SURFACE ) {
-                    //console.log("iso");
-                    renderView(gl, this.camera.projMat, this.camera.getModelViewMat(), this.getBox(), this.meshes, false);
-                } else if (this.renderMode == renderModes.DATA_POINTS || this.renderMode == renderModes.ISO_POINTS) {
-                    //console.log("points");
-                    renderView(gl, this.camera.projMat, this.camera.getModelViewMat(), this.getBox(), this.meshes, true);
-                }
-                timer.stop("render", this.getTotalVerts());
-            };
+            this.marcher.renderMesh(gl, this.camera.projMat, this.camera.getModelViewMat(), this.getBox(), this.renderMode);
         }
         this.delete = function() {
+            // remove dom
             this.getViewContainer().remove();
-            // unregister for objects
-            for (let mesh of this.meshes) {
-                meshManager.removeUser(mesh);
-            }
-            cameraManager.removeUser(camera);
-            dataManager.removeUser(data);
+            // deregister from camera
+            cameraManager.removeUser(this.camera);
+            // deregister from marcher
+            marcherManager.removeUser(this.marcher);
         }
+
+
+        // call the init function
+        this.init();
     }
 }
-
-// flow for marching fine data:
-
-// the threshold value is chosen
-// check if the fine data at the threshold is loaded in march instance
-// if not:
-//      check if it is loaded in the [[fine data storage]]
-//      if not:
-//          load the data at the threshold value from the server
-// continue to march the data ####
-//
-// the [[fine data]] instance manage the data it contains so that
-// when the march completes:
-//      expand the data that is loaded in the march instance
-
-
-// block memory management:
-
-// need to remain within budget at all times
-// budget for march instance can be ascertained at init
-// budget for fine data shared among all of the fine data users
-// always keep a track of the range/ranges of data loaded
-//      in terms of threshold values
-// assumes system block storage > march instance block storage
-
-// to expand blocks stored:
-// work from the threshold value always
-// gradually increase the size of the range until the number of blocks fills the allocated memory
-//      start by increasing range by small amount (~1% of total value range)
-//      increase is symmetric either side of 
-//      query datastructure so see how many blocks lie exclusively in this new range
-//      gradually expand the search - the velocity (Δ window size) given by a pid loop
-//      the amount of space left is input to pid
-//      stop when total > allowed and use prev
-//      also keep a track of when the range is 
-// look for any intercept with the range that is currently stored
-// can keep the blocks that are still part of this new range
-// remove those that aren't part of the new range
-// request the new blocks 
-

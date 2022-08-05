@@ -5,6 +5,7 @@ import {get, isVisible, show, hide, removeAllChildren, setupCanvasDims, repositi
 import {dataManager} from "./data.js";
 import {cameraManager} from "./camera.js";
 import { meshManager } from "./mesh.js";
+import { marcherManager } from "./marcher.js";
 import { viewManager, renderModes } from "./view.js";
 
 import {setRenderModule, setupRenderer, resizeRenderingContext, autoSetRenderModule} from "./render.js";
@@ -235,6 +236,7 @@ async function main() {
                 console.log(viewManager.views);
                 console.log(meshManager.meshes);
                 console.log(cameraManager.cameras);
+                console.log(marcherManager.marchers);
                 console.log(dataManager.datas);
                 break;
             case "Alt":

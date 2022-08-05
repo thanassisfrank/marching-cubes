@@ -274,6 +274,9 @@ class requestHandler(BaseHTTPRequestHandler):
 
         for i in range(len(request["blocks"])):
             id = request["blocks"][i]
+            if type(id) is not int:
+                print(type(id))
+                continue
             fine_data[i*block_vol:(i+1)*block_vol] = data[id*block_vol:(id+1)*block_vol]
 
 

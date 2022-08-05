@@ -130,9 +130,69 @@ export var xyzToA = (obj) => {
     return [obj.x, obj.y, obj.z];
 }
 
+export var volume = (arr) => {
+    return arr[0]*arr[1]*arr[2];
+}
+
 export var getXMLContent = (node) => {
     return node.firstChild.nodeValue;
 }
+
+export var rangesOverlap = (range1, range2) => {
+    return range1[0] <= range2[1] && range2[0] <= range1[1];
+}
+
+// returns the ranges that need to be added/removed to convert range1 -> range2
+export var getRangeDeltas = (range1, range2) => {
+    var add = [];
+    var remove = [];
+    
+    // check if there is any overlap between the ranges
+    if (rangesOverlap(range1, range2)) {
+        if (range1[0] < range2[0]) {
+            // left end needs to be cut
+            remove.push({
+                range: [range1[0], range2[0]],
+                exclusive: [false, true]
+            })
+        } else if (range1[0] > range2[0]) {
+            // left end needs to be added
+            add.push({
+                range: [range2[0], range1[0]],
+                exclusive: [false, true]
+            })
+        }
+        if (range1[1] > range2[1]) {
+            // right end needs to be cut
+            remove.push({
+                range: [range2[1], range1[1]],
+                exclusive: [true, false]
+            })
+        } else if (range1[1] < range2[1]) {
+            // right end needs to be added
+            add.push({
+                range: [range1[1], range2[1]],
+                exclusive: [true, false]
+            })
+        }
+    } else {
+        // if (range1[0] < range2[0]) {
+        //     // range 1 is entirely to left
+        //     add.push({range: range2, exclusive: [false, false]});
+        //     remove.push({range: [range1[0], range2[0]], exclusive: [false, true]});
+        // } else {
+        //     // range 1 is entirely to the right
+        //     add.push({range: range2, exclusive: [false, false]});
+        //     remove.push({range: [range2[1], range1[1]], exclusive: [true, false]});
+        // }
+        add.push({range: range2, exclusive: [false, false]});
+        remove.push({range: range1, exclusive: [false, false]});
+        
+    }
+    return {add: add, remove: remove}; 
+}
+
+console.log(getRangeDeltas([Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY], [1, 5]));
 
 const child = {
     LEFT: 0, 

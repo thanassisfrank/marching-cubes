@@ -5,7 +5,20 @@ import * as gpu from "./webGPU.js";
 import * as gl from "./webgl.js";
 import {module as marchModule} from "./march.js";
 
-export {autoSetRenderModule, setRenderModule, setupRenderer, createBuffers, buffersUpdateNeeded, updateMeshBuffers, renderView, renderPoints, deleteBuffers, clearScreen, resizeRenderingContext};
+export {
+    autoSetRenderModule, 
+    setRenderModule, 
+    setupRenderer, 
+    createBuffers, 
+    buffersUpdateNeeded, 
+    updateMeshBuffers, 
+    renderView, 
+    renderMesh,
+    renderPoints, 
+    deleteBuffers, 
+    clearScreen, 
+    resizeRenderingContext
+};
 
 var module;
 
@@ -60,6 +73,14 @@ function renderView(...args) {
         return gpu.renderView(...args);
     } else {
         return gl.renderView(...args);
+    }
+}
+
+function renderMesh(...args) {
+    if (module == "gpu") {
+        return gpu.renderMesh(...args);
+    } else {
+        console.log("not implemented yet")
     }
 }
 

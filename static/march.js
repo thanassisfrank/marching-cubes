@@ -3,18 +3,20 @@
 // chooses which to use depending on availability
 import * as gpu from "./webGPU.js";
 import * as wasm from "./marchingWasm.js";
-import * as js from "./marching.js";
+import * as js from "./marchingJS.js";
 
 export var module;
+
+export var maxBufferSize;
 
 export function autoSetMarchModule() {
     if (navigator.gpu) {
         // use webGPU
-        module = "gpu";
+        setMarchModule("gpu");
         console.log("webgpu is supported")
     } else {
         // use wasm
-        module = "wasm";
+        setMarchModule("wasm");
         console.log("webgpu is not supported, using wasm")
     }
 }
@@ -35,6 +37,7 @@ export function getMarchModule() {
 export async function setupMarchModule() {
     if (module == "gpu") {
         await gpu.setupMarchModule();
+        maxBufferSize = gpu.maxStorageBufferBindingSize;
     } else if (module == "wasm") {
         await wasm.setupWasm();
     }
@@ -45,6 +48,12 @@ export async function setupMarch(...args) {
         await gpu.setupMarch(...args)
     } else if (module == "wasm") {
         await wasm.setupData(...args)
+    }
+}
+
+export async function setupMarchFine(...args) {
+    if (module == "gpu") {
+        await gpu.setupMarchFine(...args)
     }
 }
 
@@ -74,6 +83,17 @@ export async function marchMulti(datas, meshes, threshold) {
     }
 }
 
+export async function updateActiveBlocks(...args) {
+    if (module == "gpu") {
+        await gpu.updateActiveBlocks(...args);
+    }
+}
+
+export async function updateMarchFineData(...args) {
+    if (module == "gpu") {
+        await gpu.updateMarchFineData(...args);
+    }
+}
 // called when marching
 export async function marchFine(...args) {
     if (module == "gpu") {

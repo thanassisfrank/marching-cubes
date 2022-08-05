@@ -9,7 +9,10 @@ export {
 
     setupMarchModule, 
     setupMarch, 
+    setupMarchFine,
     march, 
+    updateActiveBlocks,
+    updateMarchFineData,
     marchFine, 
     cleanupMarchData,
 
@@ -17,6 +20,7 @@ export {
     createBuffers, 
     updateBuffers, 
     renderView, 
+    renderMesh,
     deleteBuffers, 
     clearScreen, 
     resizeRenderingContext
@@ -650,7 +654,10 @@ async function setupWebGPU() {
         maxStorageBufferBindingSize: 2
     });
     console.log(device.limits);
+    maxStorageBufferBindingSize = device.limits.maxStorageBufferBindingSize;
 }
+
+export var maxStorageBufferBindingSize;
 
 // generates a BGLayout from the input string
 // " " separates bindings
@@ -696,6 +703,8 @@ var device;
 
 var meshRenderPipeline;
 var pointsRenderPipeline;
+
+var currentDepthStencilTexture; 
 
 // specific buffers for each mesh loaded
 var buffers = {};
@@ -891,23 +900,84 @@ async function setupMarch(dataObj) {
     dataObj.marchData.pipelines.march = createMarchPipeline(dataObj);
     
     createBindGroups(dataObj);   
-    
-    if (dataObj.complex) {
-        console.log("setting up complex dataset")
-        enumerateFineCode = await enumerateFineCode;
-        marchFineCode = await marchFineCode;
-
-        // create the pipelines
-        dataObj.marchData.pipelines = {
-            ...dataObj.marchData.pipelines,
-            enumerateFine: createEnumerateFinePipeline(dataObj),
-            marchFine: createMarchFinePipeline(dataObj)
-        }
-    
-    }
 
     console.log("setup complete");
     
+}
+
+async function setupMarchFine(dataObj) {
+    console.log("setting up complex dataset")
+    dataObj.marchData = {
+        buffers:{},
+        bindGroups:{}
+    }
+
+    dataObj.marchData.cellScale = 1;
+      
+    dataObj.marchData.packing = 1;
+    if (dataObj.dataType == Float32Array) {
+        dataObj.marchData.packing = 1;
+    } else if (dataObj.dataType == Uint8Array) {
+        dataObj.marchData.packing = 4;
+    } else {
+        console.log("only float32 and uint8 data values supported so far");
+        return;
+    }
+
+    console.log("ready");
+    
+    enumerateFineCode = await enumerateFineCode;
+    marchFineCode = await marchFineCode;
+
+    console.log("1")
+
+    // create the pipelines
+    dataObj.marchData.pipelines = {
+        enumerateFine: createEnumerateFinePipeline(dataObj),
+        marchFine: createMarchFinePipeline(dataObj)
+    }
+    console.log("added")
+
+    const offsetTotalsBufferLength = 2 + WGPrefixSumCount*2;
+
+    var fineCountReadBuffer = device.createBuffer({
+        label: dataObj.id + ": fine count read buffer",
+        size: 2 * Uint32Array.BYTES_PER_ELEMENT,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+    })
+    var vertexOffsetTotalsBuffer = device.createBuffer({
+        label: dataObj.id + ": vert off totals buffer",
+        size: offsetTotalsBufferLength * Uint32Array.BYTES_PER_ELEMENT,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+    });
+    var indexOffsetTotalsBuffer = device.createBuffer({
+        label: dataObj.id + ": ind off totals buffer",
+        size: offsetTotalsBufferLength * Uint32Array.BYTES_PER_ELEMENT,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+    });
+    var bufferOffsetBuffer = device.createBuffer({
+        label: dataObj.id + ": buffer offset buffer",
+        size: 1 * Uint32Array.BYTES_PER_ELEMENT,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+    });
+    
+    dataObj.marchData.buffers.fineCountReadBuffer = fineCountReadBuffer;
+    dataObj.marchData.buffers.vertexOffsetTotals = vertexOffsetTotalsBuffer;
+    dataObj.marchData.buffers.indexOffsetTotals = indexOffsetTotalsBuffer;
+    dataObj.marchData.buffers.bufferOffset = bufferOffsetBuffer;
+
+    dataObj.marchData.bindGroups.bufferOffset = device.createBindGroup({
+        layout: marchData.bindGroupLayouts.prefix[1],
+        entries: [
+            {
+                binding: 0,
+                resource: {
+                    buffer: dataObj.marchData.buffers.bufferOffset
+                }
+            }
+        ]
+    });
+
 }
 
 function createBindGroups(dataObj) {
@@ -1012,18 +1082,12 @@ function createBindGroups(dataObj) {
             usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
         })
 
-        var fineCountReadBuffer = device.createBuffer({
-            label: dataObj.id + ": fine count read buffer",
-            size: 2 * Uint32Array.BYTES_PER_ELEMENT,
-            usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-        })
     
     
         dataObj.marchData.buffers.vertexOffsetTotals = vertexOffsetTotalsBuffer;
         dataObj.marchData.buffers.indexOffsetTotals = indexOffsetTotalsBuffer;
         dataObj.marchData.buffers.bufferOffset = bufferOffsetBuffer;
         dataObj.marchData.buffers.countReadBuffer = countReadBuffer;
-        dataObj.marchData.buffers.fineCountReadBuffer = fineCountReadBuffer;
 
         dataObj.marchData.bindGroups.marchVars = device.createBindGroup({
             layout: marchData.bindGroupLayouts.enumerate[1],
@@ -1784,104 +1848,24 @@ async function march(dataObj, meshObj, threshold) {
     //console.log("took: " + Math.round(performance.now()-t0) + "ms");
 }
 
-// run when the fine data is changed before marching through it
-// deals with loading the data onto the gpu, creating buffers and bindgroups
-// and cleaning up the previous buffers if they exist
-function setupmarchFine(dataObj) {
-    // destroy buffers if they already exist
+
+async function updateActiveBlocks(dataObj) {
+
     dataObj.marchData.buffers.activeBlocks?.destroy();
-    dataObj.marchData.buffers.dataFine?.destroy();
-    dataObj.marchData.buffers.blockLocations?.destroy();
     dataObj.marchData.buffers.vertexOffsetFine?.destroy();
     dataObj.marchData.buffers.indexOffsetFine?.destroy();
 
-    const packing = dataObj.marchData.packing;
-    const WGCount = dataObj.marchData.WGCount;
-    // create data buffer
-    {
-        var dataBuffer = device.createBuffer({
-            label: dataObj.id + ": fine data buffer",
-            size: 32 + Math.ceil((dataObj.fineData.length * 4/packing)/4)*4,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
-            mappedAtCreation: true
-        }); 
+    var activeBlocksBuffer = device.createBuffer({
+        label: dataObj.id + ": active blocks buffer",
+        size: 4*Math.ceil(dataObj.activeBlocks.length/4)*4,
+        usage: GPUBufferUsage.STORAGE,
+        mappedAtCreation: true
+    }); 
 
-        var range = dataBuffer.getMappedRange();
+    new Uint32Array(activeBlocksBuffer.getMappedRange(), 0, dataObj.activeBlocks.length).set(dataObj.activeBlocks);
+    activeBlocksBuffer.unmap();
 
-        var nextPtr = 0;
-        nextPtr += 16;
-
-        console.log(dataObj.blocksSize)
-        new Uint32Array(range, nextPtr, 3).set(dataObj.blocksSize);
-        nextPtr += 16;
-
-        const data = dataObj.fineData;
-
-        if (packing == 1) {
-            new Float32Array(range, nextPtr, data.length).set(data);
-        } else if(packing == 4) {
-            if (data.constructor == Float32Array) {
-                new Uint8Array(range, nextPtr, data.length).set(Uint8Array.from(data, (val) => {
-                    return 255*(val-dataObj.limits[0])/(dataObj.limits[1]-dataObj.limits[0])
-                }));
-            } else if (data.constructor == Uint8Array) {
-                console.log("uint8")
-                new Uint8Array(range, nextPtr, data.length).set(data);
-            }
-        }
-
-        dataBuffer.unmap();
-
-        var activeBlocksBuffer = device.createBuffer({
-            label: dataObj.id + ": active blocks buffer",
-            size: 4*Math.ceil(dataObj.activeBlocks.length/4)*4,
-            usage: GPUBufferUsage.STORAGE,
-            mappedAtCreation: true
-        }); 
-
-        new Uint32Array(activeBlocksBuffer.getMappedRange(), 0, dataObj.activeBlocks.length).set(dataObj.activeBlocks);
-        activeBlocksBuffer.unmap();
-
-        // create and set the locations buffer too
-        var blockLocationsBuffer = device.createBuffer({
-            label: dataObj.id + ": block locations buffer",
-            size: 4*Math.ceil(dataObj.blockLocations.length/4)*4,
-            usage: GPUBufferUsage.STORAGE,
-            mappedAtCreation: true
-        }); 
-
-        new Int32Array(blockLocationsBuffer.getMappedRange(), 0, dataObj.blockLocations.length).set(dataObj.blockLocations);
-        blockLocationsBuffer.unmap();
-
-        dataObj.marchData.buffers.dataFine = dataBuffer;
-        dataObj.marchData.buffers.activeBlocks = activeBlocksBuffer;
-        dataObj.marchData.buffers.blockLocations = blockLocationsBuffer;
-
-
-        dataObj.marchData.bindGroups.dataFine = device.createBindGroup({
-            layout: dataObj.marchData.pipelines.enumerateFine.getBindGroupLayout(1),
-            entries: [
-                {
-                    binding: 0,
-                    resource: {
-                        buffer: dataBuffer
-                    }
-                },
-                {
-                    binding: 1,
-                    resource: {
-                        buffer: activeBlocksBuffer
-                    }
-                },
-                {
-                    binding: 2,
-                    resource: {
-                        buffer: blockLocationsBuffer
-                    }
-                }
-            ]
-        });
-    };
+    dataObj.marchData.buffers.activeBlocks = activeBlocksBuffer;
 
     // create offset buffers
     {
@@ -1957,16 +1941,106 @@ function setupmarchFine(dataObj) {
             ]
         }); 
     }
+}
+// run when the fine data is changed before marching through it
+// deals with loading the data onto the gpu, creating buffers and bindgroups
+// and cleaning up the previous buffers if they exist
+
+// need block locations
+async function updateMarchFineData(dataObj, fineData, blockLocations) {
+    console.log(dataObj.marchData);
+    // destroy buffers if they already exist
+    dataObj.marchData.buffers.dataFine?.destroy();
+    dataObj.marchData.buffers.blockLocations?.destroy();
+
+    const packing = dataObj.marchData.packing;
+    const WGCount = dataObj.marchData.WGCount;
+    // create data buffer
+    {
+        var dataBuffer = device.createBuffer({
+            label: dataObj.id + ": fine data buffer",
+            size: 32 + Math.ceil((fineData.length * 4/packing)/4)*4,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+            mappedAtCreation: true
+        }); 
+
+        var range = dataBuffer.getMappedRange();
+
+        var nextPtr = 0;
+        nextPtr += 16;
+
+        console.log(dataObj.blocksSize)
+        new Uint32Array(range, nextPtr, 3).set(dataObj.blocksSize);
+        nextPtr += 16;
+
+        const data = fineData;
+
+        if (packing == 1) {
+            new Float32Array(range, nextPtr, data.length).set(data);
+        } else if(packing == 4) {
+            if (data.constructor == Float32Array) {
+                new Uint8Array(range, nextPtr, data.length).set(Uint8Array.from(data, (val) => {
+                    return 255*(val-dataObj.limits[0])/(dataObj.limits[1]-dataObj.limits[0])
+                }));
+            } else if (data.constructor == Uint8Array) {
+                console.log("uint8")
+                new Uint8Array(range, nextPtr, data.length).set(data);
+            }
+        }
+
+        dataBuffer.unmap();
+
+        
+
+        // create and set the locations buffer too
+        var blockLocationsBuffer = device.createBuffer({
+            label: dataObj.id + ": block locations buffer",
+            size: 4*Math.ceil(blockLocations.length/4)*4,
+            usage: GPUBufferUsage.STORAGE,
+            mappedAtCreation: true
+        }); 
+
+        new Int32Array(blockLocationsBuffer.getMappedRange(), 0, blockLocations.length).set(blockLocations);
+        blockLocationsBuffer.unmap();
+
+        dataObj.marchData.buffers.dataFine = dataBuffer;
+        
+        dataObj.marchData.buffers.blockLocations = blockLocationsBuffer;
+    };
+
+    
 
 }
 
 async function marchFine(dataObj, meshObj, threshold) {
     if (dataObj.fineData.length == 0) return;
+
+    dataObj.marchData.bindGroups.dataFine = device.createBindGroup({
+        layout: dataObj.marchData.pipelines.enumerateFine.getBindGroupLayout(1),
+        entries: [
+            {
+                binding: 0,
+                resource: {
+                    buffer: dataObj.marchData.buffers.dataFine
+                }
+            },
+            {
+                binding: 1,
+                resource: {
+                    buffer: dataObj.marchData.buffers.activeBlocks
+                }
+            },
+            {
+                binding: 2,
+                resource: {
+                    buffer: dataObj.marchData.buffers.blockLocations
+                }
+            }
+        ]
+    });
+
     console.log(dataObj.activeBlocks.length)   
 
-    // setup for loading the data onto the gpu =====================================
-    // also creates BGs
-    setupmarchFine(dataObj);
     // =============================================================================
 
     // write threshold 
@@ -2417,19 +2491,23 @@ function deleteBuffers(meshObj) {
     meshObj.buffers?.index?.destroy();
 };
 
+// clears the screen and creates the empty depth texture
 async function clearScreen(ctx) {
+    
+
     var commandEncoder = device.createCommandEncoder();
     // provide details of load and store part of pass
     // here there is one color output that will be cleared on load
 
     var depthStencilTexture = device.createTexture({
+        label: "depth texture",
         size: {
           width: ctx.canvas.width,
           height: ctx.canvas.height,
           depth: 1
         },
-        dimension: '2d',
-        format: 'depth32float',
+        dimension: "2d",
+        format: "depth32float",
         usage: GPUTextureUsage.RENDER_ATTACHMENT
     });
 
@@ -2443,7 +2521,7 @@ async function clearScreen(ctx) {
         depthStencilAttachment: {
             depthClearValue: 1.0,
             depthLoadOp: "clear",
-            depthStoreOp: 'discard',
+            depthStoreOp: "discard",
             view: depthStencilTexture.createView()
           }
     };
@@ -2460,7 +2538,7 @@ async function clearScreen(ctx) {
 
 async function renderView(ctx, projMat, modelViewMat, box, meshes, points) {
     
-    // make a common depthe texture for the view frame
+    // make a common depth texture for the view frame
     var depthStencilTexture = device.createTexture({
         size: {
           width: ctx.canvas.width,
@@ -2562,6 +2640,74 @@ async function renderView(ctx, projMat, modelViewMat, box, meshes, points) {
     //await device.queue.onSubmittedWorkDone();
     //console.log("rendered")
     
+}
+
+async function renderMesh(ctx, projMat, modelViewMat, box, meshObj, points) {
+    if (meshObj.indicesNum == 0 && meshObj.vertsNum == 0) {
+        return;
+    }
+    var commandEncoder = device.createCommandEncoder();
+    var depthStencilTexture = device.createTexture({
+        size: {
+          width: ctx.canvas.width,
+          height: ctx.canvas.height,
+          depth: 1
+        },
+        dimension: '2d',
+        format: 'depth32float',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT
+    });
+
+    var renderPassDescriptor = {
+        colorAttachments: [{
+            clearValue: clearColor,
+            loadOp: "load",
+            storeOp: "store",
+            view: ctx.getCurrentTexture().createView()
+        }],
+        depthStencilAttachment: {
+            depthClearValue: 1.0,
+            depthLoadOp: "load",
+            depthStoreOp: "store",
+            view: depthStencilTexture.createView()
+        }
+    };
+
+    await commandEncoder;
+        
+    const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
+
+    // for now, only draw a view if it is fully inside the canvas
+    if (box.right >= 0 && box.bottom >= 0 && box.left >= 0 && box.top >= 0) {
+        // will support rect outside the attachment size for V1 of webgpu
+        // https://github.com/gpuweb/gpuweb/issues/373 
+        passEncoder.setViewport(box.left, box.top, box.width, box.height, 0, 1);
+        // clamp to be inside the canvas
+        clampBox(box, ctx.canvas.getBoundingClientRect());
+        passEncoder.setScissorRect(box.left, box.top, box.width, box.height);
+
+        if (points) {
+            // check if the buffers are not destroyed
+            passEncoder.setPipeline(pointsRenderPipeline);
+            passEncoder.setVertexBuffer(0, meshObj.buffers.vertex);
+            passEncoder.setVertexBuffer(1, meshObj.buffers.normal);
+            passEncoder.setBindGroup(0, pointsBindGroup);
+            passEncoder.draw(meshObj.vertsNum);
+        } else {
+            passEncoder.setPipeline(meshRenderPipeline);
+            passEncoder.setIndexBuffer(meshObj.buffers.index, "uint32");
+            passEncoder.setVertexBuffer(0, meshObj.buffers.vertex);
+            passEncoder.setVertexBuffer(1, meshObj.buffers.normal);
+            passEncoder.setBindGroup(0, meshBindGroup);
+            passEncoder.drawIndexed(meshObj.indicesNum);
+        }
+    }
+    
+    passEncoder.end();
+
+    // write uniforms to buffer
+    device.queue.writeBuffer(uniformBuffer, 0, new Float32Array([...projMat, ...modelViewMat]))
+    device.queue.submit([commandEncoder.finish()]);
 }
 
 async function renderFrame() {

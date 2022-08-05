@@ -25,7 +25,7 @@
         "contentType": "text/javascript"
     },
     {
-        "path": "marching.js",
+        "path": "marchingJS.js",
         "encoding": "utf8",
         "contentType": "text/javascript"
     },
@@ -126,6 +126,11 @@
     },
     {
         "path": "jsm/loaders/VTKLoader.js",
+        "encoding": "utf8",
+        "contentType": "text/javascript"
+    },
+    {
+        "path": "marcher.js",
         "encoding": "utf8",
         "contentType": "text/javascript"
     },

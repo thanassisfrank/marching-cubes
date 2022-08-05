@@ -3,7 +3,7 @@
 
 import {VecMath} from "./VecMath.js";
 import {vec3} from "https://cdn.skypack.dev/gl-matrix";
-import { newId, DATA_TYPES, xyzToA, parseXML, IntervalTree, timer } from "./utils.js";
+import { newId, DATA_TYPES, xyzToA, volume, parseXML, IntervalTree, timer } from "./utils.js";
 import { decompressB64Str, getNumPiecesFromVTS, getDataNamesFromVTS, getPointsFromVTS, getExtentFromVTS, getPointDataFromVTS, getDataLimitsFromVTS} from "./dataUnpacker.js"
 import { cleanupMarchData } from "./march.js";
 
@@ -71,6 +71,10 @@ var dataManager = {
             // handle structured grid .vts files
             await newData.fromVTSFile(config.path);
         }
+
+        newData.config = config;
+        newData.dataType = DATA_TYPES[config.dataType];
+        newData.pointsDataType = Float32Array;
         
         this.datas[id] = newData;
 
@@ -90,12 +94,15 @@ var dataManager = {
     Data: function(id) {
         this.id = id;
         this.users = 0;
+        this.config;
         // a set of data associated with points
         // complex:
         // - a low resolution of whole dataset for fast scrolling
         // simple:
         // - the whole dataset
         this.data = [];
+        this.dataType;
+        this.pointsDataType;
         // what this.data represents
         this.dataName = "";
         // used by the .vts format to place points in space
@@ -125,6 +132,8 @@ var dataManager = {
         this.maxSize = 0;
         this.maxCellSize = 0;
         this.volume = 0;
+        this.fullSize = [];
+        this.fullVolume = 0;
         this.midPoint = [0, 0, 0];
         this.size = [];
         this.cellSize = [1, 1, 1];
@@ -153,6 +162,7 @@ var dataManager = {
             this.normalsInitialised = false;
             this.normalsPopulated = false;
             this.volume = x * y * z;
+            console.log(x, y, z);
             this.maxSize = Math.max(x, y, z);
             this.midPoint = [(x-1)/2*sx, (y-1)/2*sy, (z-1)/2*sz];
             this.size = [x, y, z];
@@ -425,6 +435,11 @@ var dataManager = {
                 Math.floor(config.size.z/blockSize[2])
             ]
 
+            this.fullSize = [config.size.x, config.size.y, config.size.z];
+            this.fullVolume = volume(this.fullSize);
+
+            this.blockSize = blockSize;
+
             this.limits = config.limits;
             console.log(this.limits)
             this.initialise(
@@ -483,12 +498,10 @@ var dataManager = {
             console.log(this.fineData.length/64);
         }
         
-        // same as above but searched for the cut blocks on client
+        // requests the blocks that intercept with the threshold from the server
         this.getFineDataBlocks = async function(threshold) {
             // entries in active blocks gives the id of the block in the same position in this.data
             this.activeBlocks = [];
-
-            
 
             timer.start("linear")
             // block locations is a list of all blocks and where they are in this.data if they are there
@@ -514,13 +527,51 @@ var dataManager = {
             }
 
             this.fineData = await this.fetchBlocks(this.activeBlocks);
+
+
+            // activeblocks
+            // blockLocations
         }
 
+        // allows a query of which blocks intersect with the given range
+        this.queryBlocks = function(range, exclusive = [false, false]) {
+            var intersecting = [];
+            // block locations is a list of all blocks and where they are in this.data if they are there
+            var l, r;
+            for (let i = 0; i < this.blockLimits.length/2; i++) {
+                l = this.blockLimits[2*i];
+                r = this.blockLimits[2*i + 1];
+                if (l <= range[1] && range[0] <= r) {
+                    if (exclusive[0] && l <= range[0]) continue;
+                    if (exclusive[1] && r >= range[1]) continue;
+                    intersecting.push(i);
+                }
+            } 
+            return intersecting;
+        }
+        // same as above but returns a number
+        this.queryBlocksCount = function(range, exclusive = [false, false]) {
+            var num = 0;
+            // block locations is a list of all blocks and where they are in this.data if they are there
+            var l, r;
+            for (let i = 0; i < this.blockLimits.length/2; i++) {
+                l = this.blockLimits[2*i];
+                r = this.blockLimits[2*i + 1];
+                if (l <= range[1] && range[0] <= r) {
+                    if (exclusive[0] && l <= range[0]) continue;
+                    if (exclusive[1] && r >= range[1]) continue;
+                    num++;
+                }
+            } 
+            return num;
+        }
+
+        // fetches the supplied blocks
         this.fetchBlocks = function(blocks) {
             const request = {
                 name: this.config.name,
                 mode: "blocks",
-                blocks: this.activeBlocks
+                blocks: blocks
             }
 
             var that = this;
@@ -528,11 +579,16 @@ var dataManager = {
             return fetch("/data", {
                 method: "POST",
                 body: JSON.stringify(request)
-            }).then(response => 
-                response.arrayBuffer().then(buffer => 
-                    new DATA_TYPES[that.config.dataType](buffer)
-                )
-            )
+            })
+            .then(response => response.arrayBuffer())
+            .then(buffer => new DATA_TYPES[that.config.dataType](buffer))
+        }
+
+        this.bytesPerBlockData = function() {
+            return volume(blockSize)*DATA_TYPES[this.config.dataType].BYTES_PER_ELEMENT;
+        }
+        this.bytesPerBlockPoints = function() {
+            return volume(blockSize)*3*4; // assume positions are float32 for now
         }
 
         // only works with 4x4x4 and when resolution is 1
@@ -666,3 +722,8 @@ function getPos(i, size) {
 function getIndex(x, y, z, size) {
     return x*size[1]*size[2] + y*size[2] + z;
 }
+
+
+
+// need to intialise the coarse, whole data in the march module as part of init
+// then delete its copy of the data as it is only needed in the march module
