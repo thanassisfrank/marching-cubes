@@ -85,8 +85,8 @@ var marcherManager = {
                 this.fineData;
                 this.finePoints;
                 this.limits = data.limits; // [min, max]
-                this.blocksSize = data.blocksSize;
-                this.blockVol = volume(data.blockSize);
+                this.blocksSize = data.blocksSize; // size of dataset in blocks (x, y, z)
+                this.blockVol = volume(data.blockSize); // total number of blocks in dataset
                 this.activeBlocks; // temp storage for pulling the immediately needed blocks through from server
                 this.blockLocations;  // a directory of the blocks loaded into the marcher's store
                 this.loadedRange = [null, null];

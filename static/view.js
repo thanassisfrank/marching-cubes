@@ -225,7 +225,7 @@ var viewManager = {
             // the box is relative to the canvas element
             var rect = this.getFrameElem().getBoundingClientRect();
             var canvasRect = get("c").getBoundingClientRect();
-            this.box.left = rect.left - canvasRect.left// + window.scrollX;
+            this.box.left = rect.left - canvasRect.left;// + window.scrollX;
             this.box.top = rect.top - canvasRect.top;
             this.box.right = window.innerWidth + canvasRect.left - rect.right;
             this.box.bottom = window.innerHeight + canvasRect.top - rect.bottom// - window.scrollY;

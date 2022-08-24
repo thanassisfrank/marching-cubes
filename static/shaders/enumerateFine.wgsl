@@ -29,6 +29,12 @@ struct Data {
     data : array<u32>,
 };
 
+struct DataInfo {
+    @size(4) threshold : f32,         // threshold value
+    @size(12) blockOffset : u32,      // block offset
+    @size(16) blocksSize : vec3<u32>, // size in blocks
+}
+
 struct U32Buffer {
     buffer : array<u32>,
 };
@@ -39,9 +45,10 @@ struct I32Buffer {
 
 @group(0) @binding(0) var<storage, read> tables : Tables;
 
-@group(1) @binding(0) var<storage, read> d : Data;
-@group(1) @binding(1) var<storage, read> activeBlocks : U32Buffer;
-@group(1) @binding(2) var<storage, read> locations : I32Buffer;
+@group(1) @binding(0) var<storage, read> dataInfo : DataInfo;
+@group(1) @binding(1) var data : texture_3d<f32>;
+@group(1) @binding(2) var<storage, read> activeBlocks : U32Buffer;
+@group(1) @binding(3) var<storage, read> locations : I32Buffer;
 
 @group(2) @binding(0) var<storage, read_write> WGVertOffsets : U32Buffer;
 @group(2) @binding(1) var<storage, read_write> WGIndexOffsets : U32Buffer;
@@ -85,9 +92,15 @@ fn unpack(val: u32, i : u32, packing : u32) -> f32{
 
 // different from other getVal as x, y, z are local to block and uses
 // the number of the current wg(block) too
-fn getVal(x : u32, y : u32, z : u32, WGId : u32, packing : u32) -> f32 {
-    var i = WGId * {{WGVol}}u + getIndex(x, y, z, WGSize);
-    return unpack(d.data[i/packing], i%packing, packing);
+fn getVal(x : u32, y : u32, z : u32, blockIndex : u32, packing : u32) -> f32 {
+    // linear index of texel
+    var i = blockIndex * {{WGVol}}u + getIndex(x, y, z, WGSize);
+    var coords = vec3<i32>(posFromIndex(i, vec3<u32>(textureDimensions(data, 0).zyx)).zyx);
+    return f32(textureLoad(
+        data,
+        coords,
+        0
+    ).x);
 }
 
 fn posFromIndex(i : u32, size : vec3<u32>) -> vec3<u32> {
@@ -158,7 +171,7 @@ fn main(
         cellsSize = WGSize - vec3<u32>(1u);
         // max workgroups per dimension is 65535 so need to wrap 3d
         // coords to 1d if there is more than that
-        WGIndex = WGId.x + d.blockOffset;
+        WGIndex = WGId.x + dataInfo.blockOffset;
     }
 
     workgroupBarrier();
@@ -167,7 +180,7 @@ fn main(
 
     // get the index in dataset and position of current block
     var thisIndex = activeBlocks.buffer[WGIndex];
-    var thisBlockPos = posFromIndex(thisIndex, d.blocksSize);
+    var thisBlockPos = posFromIndex(thisIndex, dataInfo.blocksSize);
     var thisBlockLoc = u32(locations.buffer[thisIndex]);
 
     // first load all the required data into workgroup memory ==============================================
@@ -210,9 +223,9 @@ fn main(
             if (i == 8u) {break;};
             if (all(neighbours == neighbourConfigs[i])) {
                 var neighbourPos = thisBlockPos + neighbours;
-                if (all(neighbourPos < d.blocksSize)) {
+                if (all(neighbourPos < dataInfo.blocksSize)) {
                     //neighbour is within boundary
-                    var neighbourIndex = getIndexV(neighbourPos, d.blocksSize);
+                    var neighbourIndex = getIndexV(neighbourPos, dataInfo.blocksSize);
                     if (locations.buffer[neighbourIndex] > -1) {
                         // the face neighbour is part of the loaded dataset
                         // now increment the correct dimenson of cellsSize
@@ -243,7 +256,7 @@ fn main(
                     continuing{j=j+1u;}
                 }
                 if (allowed) {
-                    var neighbourIndex = u32(locations.buffer[thisIndex + getIndexV(neighbourConfigs[i], d.blocksSize)]);
+                    var neighbourIndex = u32(locations.buffer[thisIndex + getIndexV(neighbourConfigs[i], dataInfo.blocksSize)]);
                     var src = lid*(vec3<u32>(1u) - neighbourConfigs[i]);
                     var dst = lid + neighbourConfigs[i];
                     blockData[dst.x][dst.y][dst.z] = getVal(src.x, src.y, src.z, neighbourIndex, packing);
@@ -278,7 +291,7 @@ fn main(
             // the coordinate of the vert being looked at
             c = tables.vertCoord[i];
             val = blockData[(lid.x + c[0])*cellScale][(lid.y + c[1])*cellScale][(lid.z + c[2])*cellScale];
-            if (val > d.threshold) {
+            if (val > dataInfo.threshold) {
                 code = code | (1u << i);
             }
 

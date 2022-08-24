@@ -35,6 +35,8 @@ const WGSize = {
 
 const WGPrefixSumCount = 256;
 const WGTransformVertsCount = 256;
+const MaxFineDataDimension = WGSize.x*128;
+const MaxFineBlocksCount = Math.pow(MaxFineDataDimension/WGSize.x, 3);
 
 //var WGCount = {};
 
@@ -880,7 +882,7 @@ function createBindGroupLayouts() {
 
     marchData.bindGroupLayouts.enumerateFine = [
         generateBGLayout("cbr"),
-        generateBGLayout("cbr cbr cbr"),
+        generateBGLayout("cbr ctn3df cbr cbr"),
         generateBGLayout("cbs cbs")
     ];
 
@@ -898,7 +900,7 @@ function createBindGroupLayouts() {
 
     marchData.bindGroupLayouts.marchFine = [
         generateBGLayout("cbr"),
-        generateBGLayout("cbr cbr cbr"),
+        generateBGLayout("cbr ctn3df cbr cbr"),
         generateBGLayout("cbs cbs"),
         generateBGLayout("cbs cbs")
     ];
@@ -961,6 +963,7 @@ async function setupMarch(dataObj) {
 async function setupMarchFine(dataObj) {
     console.log("setting up complex dataset")
     dataObj.marchData = {
+        textures:{},
         buffers:{},
         bindGroups:{}
     }
@@ -1779,7 +1782,7 @@ async function march(dataObj, meshObj, threshold) {
 
     meshObj.indicesNum = indNum;
     meshObj.vertsNum = vertNum;
-    console.log(vertNum, indNum);
+    //console.log(vertNum, indNum);
 
     // if (vertNum == 0 || indNum == 0) {
         
@@ -1940,63 +1943,122 @@ async function updateActiveBlocks(dataObj) {
 async function updateMarchFineData(dataObj, fineData, blockLocations) {
     console.log(dataObj.marchData);
     // destroy buffers if they already exist
-    dataObj.marchData.buffers.dataFine?.destroy();
+    dataObj.marchData.textures.dataFine?.destroy();
+    dataObj.marchData.buffers.dataInfoFine?.destroy();
     dataObj.marchData.buffers.blockLocations?.destroy();
 
     const packing = dataObj.marchData.packing;
     const WGCount = dataObj.marchData.WGCount;
-    // create data buffer
+    
+    // create texture
     {
-        var dataBuffer = device.createBuffer({
-            label: dataObj.id + ": fine data buffer",
+        const textureSize = {};
+        if (dataObj.blockVol < MaxFineBlocksCount) {
+            textureSize.width = dataObj.blocksSize[2] * WGSize.z;
+            textureSize.height = dataObj.blocksSize[1] * WGSize.y;
+            textureSize.depthOrArrayLayers = dataObj.blocksSize[0] * WGSize.x;
+        } else {
+            textureSize.width = MaxFineDataDimension;
+            textureSize.height = MaxFineDataDimension;
+            textureSize.depthOrArrayLayers = MaxFineDataDimension;
+        }
+
+        console.log(textureSize);
+        
+        // transfer data over
+        // create the buffer to copy from
+        if (false){//dataObj.structuredGrid) {
+            // if structured grid, combine data and points into one buffer
+            // texel: (val, x pos, y pos, z pos)
+            var dataBuffer = new Float32Array(dataObj.data.length * 4);
+            for (let i = 0; i < dataObj.data.length; i++) {
+                dataBuffer[4*i + 0] = dataObj.data[i];
+                dataBuffer[4*i + 1] = dataObj.points[3*i + 0];
+                dataBuffer[4*i + 2] = dataObj.points[3*i + 1];
+                dataBuffer[4*i + 3] = dataObj.points[3*i + 2];
+            }
+
+            dataObj.marchData.textures.data = device.createTexture({
+                label: "whole data texture",
+                size: textureSize,
+                dimension: "3d",
+                format: "rgba32float",
+                usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
+            })
+            console.log(dataObj.marchData.textures.data)
+
+            device.queue.writeTexture(
+                {
+                    texture: dataObj.marchData.textures.data
+                },
+                dataBuffer,
+                {
+                    offset: 0,
+                    bytesPerRow: textureSize.width * 4 * 4,
+                    rowsPerImage: textureSize.height
+                },
+                textureSize
+            )
+        } else {
+            dataObj.marchData.textures.dataFine = device.createTexture({
+                label: "whole data texture",
+                size: textureSize,
+                dimension: "3d",
+                format: "r32float",
+                usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
+            })
+
+            // the number of images (depth layers) needed for all the data to be set
+            const images = Math.ceil(fineData.length/(textureSize.width*textureSize.height));
+            console.log(images);
+            const fineBuffer = new Float32Array(images*textureSize.width*textureSize.height);
+            fineBuffer.set(fineData);
+
+            device.queue.writeTexture(
+                {
+                    texture: dataObj.marchData.textures.dataFine
+                },
+                fineBuffer,
+                {
+                    offset: 0,
+                    bytesPerRow: textureSize.width * 4,
+                    rowsPerImage: textureSize.height
+                },
+                {
+                    width: textureSize.width,
+                    height: textureSize.height,
+                    depthOrArrayLayers: images
+                }
+            )
+        }   
+        
+        dataObj.marchData.buffers.dataInfoFine = device.createBuffer({
+            label: dataObj.id + ": fine data info buffer",
             size: 32 + Math.ceil((fineData.length * 4/packing)/4)*4,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
             mappedAtCreation: true
         }); 
 
-        var range = dataBuffer.getMappedRange();
+        var range = dataObj.marchData.buffers.dataInfoFine.getMappedRange();
 
-        var nextPtr = 0;
-        nextPtr += 16;
-
-        console.log(dataObj.blocksSize)
-        new Uint32Array(range, nextPtr, 3).set(dataObj.blocksSize);
-        nextPtr += 16;
-
-        const data = fineData;
-
-        if (packing == 1) {
-            new Float32Array(range, nextPtr, data.length).set(data);
-        } else if(packing == 4) {
-            if (data.constructor == Float32Array) {
-                new Uint8Array(range, nextPtr, data.length).set(Uint8Array.from(data, (val) => {
-                    return 255*(val-dataObj.limits[0])/(dataObj.limits[1]-dataObj.limits[0])
-                }));
-            } else if (data.constructor == Uint8Array) {
-                console.log("uint8")
-                new Uint8Array(range, nextPtr, data.length).set(data);
-            }
-        }
-
-        dataBuffer.unmap();
-
+        new Uint32Array(range, 16, 3).set(dataObj.blocksSize);
         
+        dataObj.marchData.buffers.dataInfoFine.unmap();
+    }
 
-        // create and set the locations buffer too
-        var blockLocationsBuffer = device.createBuffer({
-            label: dataObj.id + ": block locations buffer",
-            size: 4*Math.ceil(blockLocations.length/4)*4,
-            usage: GPUBufferUsage.STORAGE,
-            mappedAtCreation: true
-        }); 
+    // create and set the locations buffer too
+    var blockLocationsBuffer = device.createBuffer({
+        label: dataObj.id + ": block locations buffer",
+        size: 4*Math.ceil(blockLocations.length/4)*4,
+        usage: GPUBufferUsage.STORAGE,
+        mappedAtCreation: true
+    }); 
 
-        new Int32Array(blockLocationsBuffer.getMappedRange(), 0, blockLocations.length).set(blockLocations);
-        blockLocationsBuffer.unmap();
+    new Int32Array(blockLocationsBuffer.getMappedRange(), 0, blockLocations.length).set(blockLocations);
+    blockLocationsBuffer.unmap();
 
-        dataObj.marchData.buffers.dataFine = dataBuffer;
-        
-        dataObj.marchData.buffers.blockLocations = blockLocationsBuffer;
-    };
+    
+    dataObj.marchData.buffers.blockLocations = blockLocationsBuffer;
 
     
 
@@ -2005,23 +2067,28 @@ async function updateMarchFineData(dataObj, fineData, blockLocations) {
 async function marchFine(dataObj, meshObj, threshold) {
     if (dataObj.fineData.length == 0) return;
 
+    // make the bindgroup for the data
     dataObj.marchData.bindGroups.dataFine = device.createBindGroup({
         layout: dataObj.marchData.pipelines.enumerateFine.getBindGroupLayout(1),
         entries: [
             {
                 binding: 0,
                 resource: {
-                    buffer: dataObj.marchData.buffers.dataFine
+                    buffer: dataObj.marchData.buffers.dataInfoFine
                 }
             },
             {
                 binding: 1,
+                resource: dataObj.marchData.textures.dataFine.createView()
+            },
+            {
+                binding: 2,
                 resource: {
                     buffer: dataObj.marchData.buffers.activeBlocks
                 }
             },
             {
-                binding: 2,
+                binding: 3,
                 resource: {
                     buffer: dataObj.marchData.buffers.blockLocations
                 }
@@ -2034,7 +2101,7 @@ async function marchFine(dataObj, meshObj, threshold) {
     // =============================================================================
 
     // write threshold 
-    device.queue.writeBuffer(dataObj.marchData.buffers.dataFine, 0, new Float32Array([transformThreshold(threshold, dataObj)]));
+    device.queue.writeBuffer(dataObj.marchData.buffers.dataInfoFine, 0, new Float32Array([threshold]));
 
     const maxWG = device.limits.maxComputeWorkgroupsPerDimension;
     var totalBlocks = dataObj.activeBlocks.length;
@@ -2043,7 +2110,7 @@ async function marchFine(dataObj, meshObj, threshold) {
 
     for (let i = 0; i < Math.ceil(totalBlocks/maxWG); i++) {
         var commandEncoder = await device.createCommandEncoder();
-        device.queue.writeBuffer(dataObj.marchData.buffers.dataFine, 4, new Uint32Array([blockOffset]));
+        device.queue.writeBuffer(dataObj.marchData.buffers.dataInfoFine, 4, new Uint32Array([blockOffset]));
         thisNumBlocks =  Math.min(maxWG, totalBlocks-blockOffset);
 
         var passEncoder = commandEncoder.beginComputePass();
@@ -2177,7 +2244,7 @@ async function marchFine(dataObj, meshObj, threshold) {
 
     for (let i = 0; i < Math.ceil(totalBlocks/maxWG); i++) {
         var commandEncoder = await device.createCommandEncoder();
-        device.queue.writeBuffer(dataObj.marchData.buffers.dataFine, 4, new Uint32Array([blockOffset]));
+        device.queue.writeBuffer(dataObj.marchData.buffers.dataInfoFine, 4, new Uint32Array([blockOffset]));
         thisNumBlocks =  Math.min(maxWG, totalBlocks-blockOffset);
 
         var commandEncoder = await device.createCommandEncoder();

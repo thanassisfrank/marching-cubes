@@ -41,7 +41,6 @@ struct Atoms {
 @group(0) @binding(2) var dataSampler : sampler;
 @group(0) @binding(3) var<storage, read> tables : Tables;
 
-
 @group(1) @binding(0) var<storage, read_write> vars : Vars;
 
 @group(2) @binding(0) var<storage, read_write> verts : F32Buff;
@@ -61,11 +60,11 @@ fn getIndex3d(x : u32, y : u32, z : u32, size : vec3<u32>) -> u32 {
 }
 
 fn getVal(x : u32, y : u32, z : u32, cellScale : u32) -> f32 {
-    return bitcast<f32>(textureLoad(
+    return textureLoad(
         data,
         vec3<i32>(vec3<u32>(z, y, x)*cellScale),
         0
-    )[0]);
+    )[0];
 }
 
 fn getPointPos(x : u32, y : u32, z : u32, cellScale : u32) -> vec3<f32> {
@@ -73,6 +72,15 @@ fn getPointPos(x : u32, y : u32, z : u32, cellScale : u32) -> vec3<f32> {
         data,
         vec3<i32>(vec3<u32>(z, y, x)*cellScale),
         0
+    ).yzw;
+}
+
+fn samplePointPos(x: f32, y: f32, z: f32, cellScale : u32) -> vec3<f32> {
+    var uvw = vec3<f32>(z, y, x)*f32(cellScale)/(vec3<f32>(textureDimensions(data, 0).zyx) - vec3<f32>(1));
+    return textureSample(
+        data,
+        dataSampler,
+        uvw
     ).yzw;
 }
 
