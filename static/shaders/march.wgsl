@@ -1,9 +1,13 @@
 struct Data {
-    @size(16) size : vec3<u32>,
-    @size(16) WGNum : vec3<u32>,
-    @size(16) cellSize : vec3<f32>,
+    @size(16) size : vec3<u32>,      // can be gotten from texture
+    // @size(16) WGNum : vec3<u32>,  // not needed
+    @size(16) cellSize : vec3<f32>,  // needs to be supplied
     data : array<u32>,
 };
+struct DataInfo {
+    @size(16) cellSize : vec3<f32>,  // the dimensions of the virtual cells being marched
+    structuredGrid : u32           // whether the 
+}
 struct Vars {
     threshold : f32,
     currVert : atomic<u32>,
@@ -27,8 +31,16 @@ struct Atoms {
     index : atomic<u32>,
 };
 
-@group(0) @binding(0) var<storage, read> d : Data;
-@group(0) @binding(1) var<storage, read> tables : Tables;
+// 0 is data info buffer
+// 1 is data texture
+// 2 is sampler
+// 3 is tables
+
+@group(0) @binding(0) var<storage, read> dataInfo : DataInfo; // contains information about dataset
+@group(0) @binding(1) var data : texture_3d<f32>; // type is what comes out of sampler
+@group(0) @binding(2) var dataSampler : sampler;
+@group(0) @binding(3) var<storage, read> tables : Tables;
+
 
 @group(1) @binding(0) var<storage, read_write> vars : Vars;
 
@@ -48,16 +60,20 @@ fn getIndex3d(x : u32, y : u32, z : u32, size : vec3<u32>) -> u32 {
     return size.y * size.z * x + size.z * y + z;
 }
 
-fn unpack(val: u32, i : u32, packing : u32) -> f32{
-    if (packing == 4u){
-        return unpack4x8unorm(val)[i];
-    }
-    return bitcast<f32>(val);
+fn getVal(x : u32, y : u32, z : u32, cellScale : u32) -> f32 {
+    return bitcast<f32>(textureLoad(
+        data,
+        vec3<i32>(vec3<u32>(z, y, x)*cellScale),
+        0
+    )[0]);
 }
 
-fn getVal(x : u32, y : u32, z : u32, packing : u32, cellScale : u32) -> f32 {
-    var a = getIndex3d(x*cellScale, y*cellScale, z*cellScale, d.size);
-    return unpack(d.data[a/packing], a%packing, packing);
+fn getPointPos(x : u32, y : u32, z : u32, cellScale : u32) -> vec3<f32> {
+    return textureLoad(
+        data,
+        vec3<i32>(vec3<u32>(z, y, x)*cellScale),
+        0
+    ).yzw;
 }
 
 
@@ -65,10 +81,15 @@ fn getVal(x : u32, y : u32, z : u32, packing : u32, cellScale : u32) -> f32 {
 fn main(
     @builtin(global_invocation_id) id : vec3<u32>,
     @builtin(local_invocation_index) localIndex : u32,
-    @builtin(workgroup_id) wgid : vec3<u32>
+    @builtin(workgroup_id) wgid : vec3<u32>,
+    @builtin(num_workgroups) wgnum : vec3<u32>
 ) {         
-    
+    const TRUE = 1u;
+    const FALSE = 0u;
+
     var WGSize = {{WGVol}}u;
+    var dataSize = vec3<u32>(textureDimensions(data, 0).zyx);
+    //var WGNum = vec3<u32>(wgnum.z, wgnum.y, wgnum.x);
     
     var cellScale = vars.cellScale;
     var packing = {{packing}}u;
@@ -83,14 +104,14 @@ fn main(
     var thisNormals : array<f32, 36>;
     var thisIndices : array<u32, 15>;
 
-    var globalIndex : u32 = getIndex3d(id.x, id.y, id.z, d.size);
+    var globalIndex : u32 = getIndex3d(id.x, id.y, id.z, dataSize);
 
     // if outside of data, return
-    var cells : vec3<u32> = vec3<u32>(d.size.x - 1u, d.size.y - 1u, d.size.z - 1u);
+    var cells : vec3<u32> = vec3<u32>(dataSize.x - 1u, dataSize.y - 1u, dataSize.z - 1u);
     if (
-        (id.x + 1u)*cellScale >= d.size.x ||
-        (id.y + 1u)*cellScale >= d.size.y || 
-        (id.z + 1u)*cellScale >= d.size.z
+        (id.x + 1u)*cellScale >= dataSize.x ||
+        (id.y + 1u)*cellScale >= dataSize.y || 
+        (id.z + 1u)*cellScale >= dataSize.z
     ) {
         // code remains 0
         code = 0u;
@@ -104,7 +125,7 @@ fn main(
             }
             // the coordinate of the vert being looked at
             coord = tables.vertCoord[i];
-            var val : f32 = getVal(id.x + coord[0], id.y + coord[1], id.z + coord[2], packing, cellScale);
+            var val : f32 = getVal(id.x + coord[0], id.y + coord[1], id.z + coord[2], cellScale);
             if (val > vars.threshold) {
                 code = code | (1u << i);
             }
@@ -131,62 +152,6 @@ fn main(
                 i = i + 1u;
             }
         }
-        // get grad of grid points
-    
-        
-        // CHANGE TO INCLUDE CELLSIZE
-
-        // i= 0u;
-        // loop {
-        //     if (i == 8u) {
-        //         break;
-        //     }
-        //     if ((activeVerts & (1u << i)) == (1u << i)) {
-        //         var a : array<u32, 3> = tables.vertCoord[i];
-        //         var X = id.x + a[0];
-        //         var Y = id.y + a[1];
-        //         var Z = id.z + a[2];
-        //         var thisVal = getVal(id.x + a[0], id.y + a[1], id.z + a[2], packing);
-
-        //         // x(i) component
-        //         if (X > 0u) {
-        //             if (X < d.size[0] - 2u){
-        //                 gridNormals[i][0] = -((getVal(X + 1u, Y, Z, packing) - getVal(X - 1u, Y, Z, packing))/2.0);
-        //             } else {
-        //                 gridNormals[i][0] = -(thisVal - getVal(X - 1u, Y, Z, packing));
-        //             }
-        //         } else {
-        //             gridNormals[i][0] = -(getVal(X + 1u, Y, Z, packing) - thisVal);
-        //         }
-
-        //         // y(Y) component
-        //         if (Y > 0u) {
-        //             if (Y < d.size[1] - 2u){
-        //                 gridNormals[i][1] = -((getVal(X, Y + 1u, Z, packing) - getVal(X, Y - 1u, Z, packing))/2.0);
-        //             } else {
-        //                 gridNormals[i][1] = -(thisVal - getVal(X, Y - 1u, Z, packing));
-        //             }
-        //         } else {
-        //             gridNormals[i][1] = -(getVal(X, Y + 1u, Z, packing) - thisVal);
-        //         }
-
-        //         // z(Z) component
-        //         if (Z > 0u) {
-        //             if (Z < d.size[2] - 2u){
-        //                 gridNormals[i][2] = -((getVal(X, Y, Z + 1u, packing) - getVal(X, Y, Z - 1u, packing))/2.0);
-        //             } else {
-        //                 gridNormals[i][2] = -(thisVal - getVal(X, Y, Z - 1u, packing));
-        //             }
-        //         } else {
-        //             gridNormals[i][2] = -(getVal(X, Y, Z + 1u, packing) - thisVal);
-        //         }
-        //     }
-        //     continuing {
-        //         i = i + 1u;
-        //     }
-        // }
-        // vertices will be produced
-
         // get vertices
         
         i = 0u;
@@ -197,17 +162,26 @@ fn main(
             var c : array<i32, 2> = tables.edgeToVerts[edges[i]];
             var a : array<u32, 3> = tables.vertCoord[c[0]];
             var b : array<u32, 3> = tables.vertCoord[c[1]];
-            var va : f32 = getVal(id.x + a[0], id.y + a[1], id.z + a[2], packing, cellScale);
-            var vb : f32 = getVal(id.x + b[0], id.y + b[1], id.z + b[2], packing, cellScale);
+            var va : f32 = getVal(id.x + a[0], id.y + a[1], id.z + a[2], cellScale);
+            var vb : f32 = getVal(id.x + b[0], id.y + b[1], id.z + b[2], cellScale);
             var fac : f32 = (vars.threshold - va)/(vb - va);
-            // fill vertices
-            thisVerts[3u*i + 0u] = (mix(f32(a[0]), f32(b[0]), fac) + f32(id.x)) * f32(cellScale) * d.cellSize.x;
-            thisVerts[3u*i + 1u] = (mix(f32(a[1]), f32(b[1]), fac) + f32(id.y)) * f32(cellScale) * d.cellSize.y;
-            thisVerts[3u*i + 2u] = (mix(f32(a[2]), f32(b[2]), fac) + f32(id.z)) * f32(cellScale) * d.cellSize.z;
-            // fill normals
-            // thisNormals[3u*i + 0u] = mix(gridNormals[c[0]][0], gridNormals[c[1]][0], fac);
-            // thisNormals[3u*i + 1u] = mix(gridNormals[c[0]][1], gridNormals[c[1]][1], fac);
-            // thisNormals[3u*i + 2u] = mix(gridNormals[c[0]][2], gridNormals[c[1]][2], fac);
+
+            if (dataInfo.structuredGrid == TRUE) {
+                var pa = getPointPos(id.x + a[0], id.y + a[1], id.z + a[2], cellScale);
+                var pb = getPointPos(id.x + b[0], id.y + b[1], id.z + b[2], cellScale);
+
+                var p = mix(pa, pb, fac);
+
+                thisVerts[3u*i + 0u] = p.x;
+                thisVerts[3u*i + 1u] = p.y;
+                thisVerts[3u*i + 2u] = p.z;
+
+            } else {
+                // fill vertices
+                thisVerts[3u*i + 0u] = (mix(f32(a[0]), f32(b[0]), fac) + f32(id.x)) * f32(cellScale) * dataInfo.cellSize.x;
+                thisVerts[3u*i + 1u] = (mix(f32(a[1]), f32(b[1]), fac) + f32(id.y)) * f32(cellScale) * dataInfo.cellSize.y;
+                thisVerts[3u*i + 2u] = (mix(f32(a[2]), f32(b[2]), fac) + f32(id.z)) * f32(cellScale) * dataInfo.cellSize.z;
+            }
 
             continuing {
                 i = i + 1u;
@@ -312,10 +286,8 @@ fn main(
     storageBarrier();
 
     if (vertNum > 0u && indexNum > 0u) {
-        //var vertOffset : u32 = WGVertOffsets.buffer[getIndex3d(wgid.x, wgid.y, wgid.z, d.WGNum)] + atomicAdd(&localVertOffsetsAtom, vertNum);
-        var vertOffset : u32 = WGVertOffsets.buffer[getIndex3d(wgid.x, wgid.y, wgid.z, d.WGNum)] + localVertOffsets[localIndex];
-        //var indexOffset : u32 = WGIndexOffsets.buffer[getIndex3d(wgid.x, wgid.y, wgid.z, d.WGNum)] + atomicAdd(&localIndexOffsetsAtom, indexNum);
-        var indexOffset : u32 = WGIndexOffsets.buffer[getIndex3d(wgid.x, wgid.y, wgid.z, d.WGNum)] + localIndexOffsets[localIndex];
+        var vertOffset : u32 = WGVertOffsets.buffer[getIndex3d(wgid.x, wgid.y, wgid.z, wgnum)] + localVertOffsets[localIndex];
+        var indexOffset : u32 = WGIndexOffsets.buffer[getIndex3d(wgid.x, wgid.y, wgid.z, wgnum)] + localIndexOffsets[localIndex];
 
         var i = 0u;
         loop {
@@ -323,8 +295,6 @@ fn main(
                 break;
             }
             verts.buffer[3u*(vertOffset) + i] = thisVerts[i];
-            //normals.buffer[3u*(vertOffset) + i] = thisNormals[i];
-
             continuing {
                 i = i + 1u;
             }

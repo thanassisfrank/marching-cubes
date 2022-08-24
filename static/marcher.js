@@ -57,22 +57,6 @@ var marcherManager = {
 
         this.dataType = data.dataType;
         this.pointsDataType = data.pointsDataType;
-        // storage for the fine data (main storage)
-        this.fineData;
-        this.finePoints;
-        this.limits = data.limits;
-        this.blocksSize = data.blocksSize;
-        this.blockVol = volume(data.blockSize);
-        this.activeBlocks; // temp storage for pulling the immediately needed blocks through from server
-        this.blockLocations;  // a directory of the blocks loaded into the marcher's store
-        this.loadedRange = [null, null];
-        this.emptyLocations = []; // list of all locations currently unoccupied or holding redundant data
-
-        this.firstTime = true;
-
-        
-        // holds the data for marching the fine blocks
-        this.marchData = {};
 
         // stores other marcher objects if data is multiblock
         this.pieces = [];
@@ -97,13 +81,30 @@ var marcherManager = {
             } else {
                 if (!data.complex) return;
 
+                // storage for the fine data (main storage)
+                this.fineData;
+                this.finePoints;
+                this.limits = data.limits; // [min, max]
+                this.blocksSize = data.blocksSize;
+                this.blockVol = volume(data.blockSize);
+                this.activeBlocks; // temp storage for pulling the immediately needed blocks through from server
+                this.blockLocations;  // a directory of the blocks loaded into the marcher's store
+                this.loadedRange = [null, null];
+                this.emptyLocations = []; // list of all locations currently unoccupied or holding redundant data
+
+                this.firstTime = true;
+
+                
+                // holds the data for marching the fine blocks
+                this.marchData = {};
+
                 // setup the fine marching for complex datasets
                 await setupMarchFine(this);
                 this.marchData.loadedRange = this.loadedRange;
                 // the maximum number of blocks that can be loaded here
                 const maxBytesPerBlock = Math.max(data.bytesPerBlockData(), data.bytesPerBlockPoints())
-                this.blocksBudget = Math.min(Math.floor(marcherManager.storageBudget/maxBytesPerBlock), volume(data.blocksSize));
-                this.marchData.blocksBudget = Math.min(Math.floor(maxBufferSize/maxBytesPerBlock), volume(data.blocksSize));
+                this.blocksBudget = Math.min(Math.floor(marcherManager.storageBudget/maxBytesPerBlock), volume(data.blocksSize)*1.1);
+                this.marchData.blocksBudget = Math.min(Math.floor(maxBufferSize/maxBytesPerBlock), volume(data.blocksSize))/2;
                 console.log("march module budget:", this.marchData.blocksBudget);
 
                 const maxFinePoints = marcherManager.storageBudget/this.dataType.BYTES_PER_ELEMENT
@@ -169,54 +170,33 @@ var marcherManager = {
                         if (this.firstTime || !rangesOverlap([threshold, threshold], this.marchData.loadedRange)) {
                             console.log("updating data stored")
                             // find what new ranges will fill both stores of data, starting from the active blocks
-                            // [0] -> for this  [1] -> for march instance
+                            // main -> this  marchModule -> for march instance
                             // const newRanges = [[threshold, threshold], [threshold, threshold]];
                             // const newRanges = [[200, 200], [200, 200]];
                             const newRanges = this.expandToFill([threshold, threshold], this.activeBlocks.length);
                             console.log(newRanges);
-                            var getBlockDeltaIDs = (newRange, oldRange) =>  {
-                                // get the overlaps with whats already loaded in this memory
-                                const rangeDeltas = getRangeDeltas(oldRange, newRange);
-                                console.log(oldRange, newRange);
-                                console.log(rangeDeltas);
-                                // get the block numbers of what needs to be added
-                                var addBlockIDs = [];
-                                for (let addRange of rangeDeltas.add) {
-                                    addBlockIDs.push(...this.data.queryBlocks(addRange.range, addRange.exclusive));
-                                }
-                                
-                                // get the block numbers of what needs to be removed
-                                var removeBlockIDs = []
-                                for (let removeRange of rangeDeltas.remove) {
-                                    removeBlockIDs.push(...this.data.queryBlocks(removeRange.range, removeRange.exclusive));
-                                }
-    
-                                return {add: addBlockIDs, remove: removeBlockIDs}
-                            }
 
                             // get the ids of blocks that need to be added/removed from data stored here
                             if (this.firstTime) {
-                                await this.updateFineData(this.data.queryBlocks(newRanges[0]), []);
+                                await this.updateFineData(this.data.queryBlocks(newRanges.main), []);
                             } else {
-                                const blockDeltaIDs = getBlockDeltaIDs(newRanges[0], this.loadedRange);
+                                const blockDeltaIDs = data.queryDeltaBlocks(this.loadedRange, newRanges.main);
                                 // update the data stored here
-                                // console.log(blockDeltaIDs.add);
                                 await this.updateFineData(blockDeltaIDs.add, blockDeltaIDs.remove);
                             }
-                            this.loadedRange = newRanges[0];
+                            this.loadedRange = newRanges.main;
                             
                             // update data stored in march instance
-                            const newMarchBlocks = await this.data.queryBlocks(newRanges[1]);
+                            const newMarchBlocks = await this.data.queryBlocks(newRanges.marchModule);
                             // work out what block Locations buffer should be
                             var marchBlockLocations = new Int32Array(this.blockLocations.length)
                             marchBlockLocations.fill(-1);
                             for (let i = 0; i < newMarchBlocks.length; i++) {
                                 marchBlockLocations[newMarchBlocks[i]] = i;
                             }
-                            //console.log(marchBlockLocations);
                             await updateMarchFineData(this, this.getFineData(newMarchBlocks), marchBlockLocations);
                             //await updateMarchFineData(this, this.fineData, this.blockLocations);
-                            this.marchData.loadedRange = newRanges[1];
+                            this.marchData.loadedRange = newRanges.marchModule;
 
                             this.firstTime = false;
                         }
@@ -235,8 +215,8 @@ var marcherManager = {
 
             var expandRangeToFill = (data, budgetCount, loadedCount, loadedRange) => {
                 var getNextConst = (err) => {
-                    const kp = 0.06;
-                    const kd = 0.05;
+                    const kp = 0.08;
+                    const kd = 0.045;
                     const ki = 0.09;
                     const p = err[0];
                     const d = err[1] ? err[0] - err[1] : 0;
@@ -276,7 +256,7 @@ var marcherManager = {
 
                     // keep going if less than 5% blocks empty and less than 20 passes have been done or if too many blocks are selected
                     
-                } while ((err[0] > 0.05 && err.length < 5) || err[0] < -budgetCount/targetBlocksCount);
+                } while ((err[0] > 0.05 && err.length < 20) || err[0] < -budgetCount/targetBlocksCount);
 
                 return [newLimits, newBlocksCount];
             }
@@ -297,18 +277,22 @@ var marcherManager = {
                 newMarchDataRange
             );
 
-            return [newDataRange, newMarchDataRange];
+            return {
+                main: newDataRange, 
+                marchModule: newMarchDataRange
+            };
         }
         // takes lists of block ids to add/remove and alters finedata to match
         this.updateFineData = async function(addBlockIDs, removeBlockIDs) {
-            var inBoth = 0;
-            for (let i = 0; i < addBlockIDs.length; i++) {
-                for (let j = 0; j < removeBlockIDs.length; j++) {
-                    if (addBlockIDs[i] == removeBlockIDs[j]) inBoth++;
-                }
-            }
-            console.log(inBoth, "in both");
+            // var inBoth = 0;
+            // for (let i = 0; i < addBlockIDs.length; i++) {
+            //     for (let j = 0; j < removeBlockIDs.length; j++) {
+            //         if (addBlockIDs[i] == removeBlockIDs[j]) inBoth++;
+            //     }
+            // }
+            // console.log(inBoth, "in both");
             console.log(addBlockIDs.length, "blocks to home");
+            console.log(removeBlockIDs.length, "blocks to remove");
             console.log(this.emptyLocations.length, "empty locations at start");
             var removed = 0;
             var added = 0;
@@ -320,13 +304,15 @@ var marcherManager = {
                 // if this block is not actually stored, skip removing it
                 if (this.blockLocations[removeBlockIDs[i]] == -1) continue
 
+                // show that this removed block is no longer stored here
                 this.blockLocations[removeBlockIDs[i]] = -1;
+
                 if (i < addBlockIDs.length) {
                     // can replace this old block with a new one
                     // overwrite with new block
                     for (let j = 0; j < this.blockVol; j++) {
-                        this.fineData[oldBlockLoc*this.blockVol + j] = newBlockData[i*this.blockVol + j];
-                        this.blockLocations[addBlockIDs[i]] = oldBlockLoc;
+                        const blockData = newBlockData.slice(i*this.blockVol, (i+1)*this.blockVol);
+                        this.fineData.set(blockData, oldBlockLoc*this.blockVol);
                     }
                     added++;
                 } else {
@@ -502,41 +488,6 @@ var marcherManager = {
 // 
 
 
-
-
-// // get the block numbers that are active
-// this.activeBlocks = this.data.queryBlocks([threshold, threshold]);
-// // transfer the active blocks # to the march module
-// updateActiveBlocks(this);
-// // check if its loaded in the march module already
-// if (!this.valueInMarchModule(threshold)) {
-//     // check if its loaded here
-//     if (!this.valueLoadedHere(threshold)) {
-//         // start the fetching
-//         this.fineData = this.data.fetchBlocks(this.activeBlocks);
-//         // sort out the block locations
-//         this.blockLocations.fill(-1);
-//         for (let i = 0; i < this.activeBlocks.length; i++) {
-//             this.blockLocations[this.activeBlocks[i]] = i;
-//         }
-
-//         // wait for the data to come through
-//         this.fineData = await this.fineData;
-//         this.loadedRange = [threshold, threshold];
-//         this.loadedBlocksCount = this.activeBlocks.length;
-//     } else {
-//         // it is here so transfer over the data
-//         // in this case, none of the data is carried over in the march module
-//     }
-//     // update block locations and fineData
-//     await updateMarchFineData(this);
-//     this.marchData.loadedRange = [threshold, threshold];
-//     this.marchData.loadedBlocksCount = this.activeBlocks.length;
-// } 
-// // march whats in GPU
-// await marchFine(this, this.mesh, threshold);
-// this.expandLoaded();
-
 // transferring fine data to GPU:
 //
 // the issue is can't just map any buffer
@@ -548,10 +499,9 @@ var marcherManager = {
 
 
 // bugs:
-// over time blocks getting deleted? mem leak?
-// > problem seems to come at least partially from blocks repeated in add and remove lists
-// > could happen even with range deltas as not exculsive when ranges dont overlap
-//     old        new
-//    +---+     +-------+
-//      +--------+
-// > need to purge all that don't overlap with new
+// over time blocks getting deleted? mem leak? - FIXED: need main mem > march mem, blocks added+removed NOT YET
+// > no longer overlapping
+// > at start is fine
+// > change threshold to outside range -> still fine
+// > change to get outside of range -> goes wrong
+// > seems to be not removing blocks when it should and adding when not needed

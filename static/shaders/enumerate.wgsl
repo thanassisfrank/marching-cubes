@@ -1,9 +1,13 @@
 struct Data {
     @size(16) size :  vec3<u32>,
-    @size(16) WGNum :  vec3<u32>,
+    // @size(16) WGNum : vec3<u32>,
     @size(16) cellSize : vec3<f32>,
     data :  array<u32>,
 };
+struct DataInfo {
+    @size(16) cellSize : vec3<f32>,  // the dimensions of the virtual cells being marched
+    structuredGrid : u32           // whether the 
+}
 struct Arr {
     data : array<i32>,
 };
@@ -27,8 +31,10 @@ struct TotalsBuffer {
     buffer : array<u32>,
 };
 
-@group(0) @binding(0) var<storage, read> d : Data;
-@group(0) @binding(1) var<storage, read> tables : Tables;
+@group(0) @binding(0) var<storage, read> dataInfo : DataInfo;
+@group(0) @binding(1) var data : texture_3d<f32>; // type is what comes out of sampler
+@group(0) @binding(2) var dataSampler : sampler;
+@group(0) @binding(3) var<storage, read> tables : Tables;
 
 @group(1) @binding(0) var<storage, read_write> vars : Vars;
 
@@ -68,24 +74,25 @@ fn getIndexCount(code : u32) -> u32 {
     return i;
 }
 
-fn unpack(val: u32, i : u32, packing : u32) -> f32{
-    if (packing == 4u){
-        return unpack4x8unorm(val)[i];
-    }
-    return bitcast<f32>(val);
+fn getVal(x : u32, y : u32, z : u32, cellScale : u32) -> f32 {
+    return bitcast<f32>(textureLoad(
+        data,
+        vec3<i32>(vec3<u32>(z, y, x)*cellScale),
+        0
+    )[0]);
 }
 
-fn getVal(x : u32, y : u32, z : u32, packing : u32) -> f32 {
-    var a = getIndex3d(x, y, z, d.size);
-    return unpack(d.data[a/packing], a%packing, packing);
-}
 
 @compute @workgroup_size({{WGSizeX}}, {{WGSizeY}}, {{WGSizeZ}})
 fn main(
     @builtin(global_invocation_id) id : vec3<u32>, 
     @builtin(local_invocation_index) localIndex : u32,
-    @builtin(workgroup_id) WGId : vec3<u32>
-) {                
+    @builtin(workgroup_id) WGId : vec3<u32>,
+    @builtin(num_workgroups) wgnum : vec3<u32>
+) {      
+    const TRUE = 1u;
+    const FALSE = 0u;
+
     var cellScale = vars.cellScale;
     var packing = {{packing}}u;
     var code = 0u;
@@ -93,13 +100,16 @@ fn main(
     var thisIndexCount = 0u;
     var WGSize = {{WGVol}}u;
 
+    var dataSize = vec3<u32>(textureDimensions(data, 0).zyx);
+    //var WGNum = vec3<u32>(wgnum.z, wgnum.y, wgnum.x);
+
     // if outside of data, return
-    var cells : vec3<u32> = vec3<u32>(d.size.x - 1u, d.size.y - 1u, d.size.z - 1u);      
+    var cells : vec3<u32> = vec3<u32>(dataSize.x - 1u, dataSize.y - 1u, dataSize.z - 1u);      
     // needs changing
     if (
-        (id.x + 1u)*cellScale < d.size.x && 
-        (id.y + 1u)*cellScale < d.size.y && 
-        (id.z + 1u)*cellScale < d.size.z
+        (id.x + 1u)*cellScale < dataSize.x && 
+        (id.y + 1u)*cellScale < dataSize.y && 
+        (id.z + 1u)*cellScale < dataSize.z
     ) {        
         var c : array<u32, 3>;
         var i = 0u;
@@ -109,7 +119,11 @@ fn main(
             }
             // the coordinate of the vert being looked at
             c = tables.vertCoord[i];
-            var val = getVal((id.x + c[0])*cellScale, (id.y + c[1])*cellScale, (id.z + c[2])*cellScale, packing);
+
+
+            var val : f32 = getVal(id.x + c[0], id.y + c[1], id.z + c[2], cellScale);
+
+
             if (val > vars.threshold) {
                 code = code | (1u << i);
             }
@@ -159,9 +173,9 @@ fn main(
     workgroupBarrier();
     storageBarrier();
     if (localIndex == 0u) {
-        WGVertOffsets.buffer[getIndex3d(WGId.x, WGId.y, WGId.z, d.WGNum)] = localVertOffsets[WGSize - 1u];
+        WGVertOffsets.buffer[getIndex3d(WGId.x, WGId.y, WGId.z, wgnum)] = localVertOffsets[WGSize - 1u];
     }
     if (localIndex == 1u) {
-        WGIndexOffsets.buffer[getIndex3d(WGId.x, WGId.y, WGId.z, d.WGNum)] = localIndexOffsets[WGSize - 1u];
+        WGIndexOffsets.buffer[getIndex3d(WGId.x, WGId.y, WGId.z, wgnum)] = localIndexOffsets[WGSize - 1u];
     }
 }

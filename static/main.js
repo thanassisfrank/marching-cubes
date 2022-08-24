@@ -84,7 +84,9 @@ async function main() {
 
     const datasets = await fetch("/datasets.json")
         .then((res) => res.json())
-        .then(d => {return {...d, ...functionalDatasets}})
+        .then(d => {return {...d, ...functionalDatasets}});
+    // setup data manager with these
+    dataManager.setConfigSet(datasets);
 
     await setupMarchModule();
     var ctx = await setupRenderer(canvas); 
@@ -110,7 +112,9 @@ async function main() {
         var dataOptions = get("data-select");
         var cameraOptions = get("camera-select");
         var thresholdOptions = get("threshold-select");
+
         if (isVisible(addViewPopup)) {
+            // hide if its shown
             console.log("hiding...");
             hide(addViewPopup);
             get("add-view").innerText = "+";
@@ -133,24 +137,10 @@ async function main() {
                 cameraOptions.appendChild(elem);
             }
 
-            // get the data from the datasets object
-            var currentDatas = dataManager.datas;
-            for (let id in datasets) {
+            for (let id in dataManager.configSet) {
                 var elem = document.createElement("OPTION");
-                if (dataManager.loaded.has(datasets[id].name)) {
-                    for (let dataId in currentDatas) {
-                        if (currentDatas[dataId].dataName == datasets[id].name) {
-                            elem.value = dataId;
-                            break;
-                        }
-                    }
-                    elem.setAttribute("loaded", true);
-                } else {
-                    elem.value = id;
-                    elem.setAttribute("loaded", false);
-                }
-                
-                elem.innerText = datasets[id].name;
+                elem.value = id;                
+                elem.innerText = dataManager.configSet[id].name;
                 dataOptions.appendChild(elem);
             }
             
@@ -166,38 +156,7 @@ async function main() {
         const selectedDataElem = d.options[d.selectedIndex];
         const selectedCameraElem = c.options[c.selectedIndex];
 
-        var newData;
-
-        if (selectedDataElem.getAttribute("loaded") == "false") {
-            timer.start("setup data");
-            if (datasets[selectedDataElem.value].complexAvailable) {
-                newData = await dataManager.createData({
-                    ...datasets[selectedDataElem.value], 
-                    accessType:"complex"
-                });
-            } else {
-                newData = await dataManager.createData({
-                    ...datasets[selectedDataElem.value], 
-                    accessType:"whole"
-                });
-            }
-            
-
-            if (newData.multiBlock) {
-                var results = [];
-                for (let i = 0; i < newData.pieces.length; i++) {
-                    results.push(setupMarch(newData.pieces[i]));
-                }
-                await Promise.all(results);
-                
-            } else {
-                await setupMarch(newData);
-            }
-            timer.stop("setup data", newData.data.length);
-        } else {
-            // is loaded already
-            newData = dataManager.datas[selectedDataElem.value];
-        }
+        var newData = await dataManager.getDataObj(selectedDataElem.value);
 
         viewManager.createView({
             camera: cameraManager.createCamera(),
@@ -208,7 +167,6 @@ async function main() {
         // hide the window
         if (isVisible(get("add-view-popup"))) get("add-view").click();
     }
-    
 
     if (!ctx) return;
 
@@ -244,73 +202,6 @@ async function main() {
                 break;
         }
     }
-
-
-    // interval tree test =============================================
-
-    // timer.start("tree create")
-    // var intervals = [];
-    // var maxVal = 1;
-    // var tree = new IntervalTree();
-    // for (let i = 0; i < 100000; i++) {
-    //     const a = maxVal*Math.random();
-    //     const b = maxVal*Math.random();
-    //     const data = i;
-    //     if (a < b) {
-    //         tree.insert([a, b], data);
-    //         intervals.push(a, b)
-    //     } else {
-    //         tree.insert([b, a], data);
-    //         intervals.push(b, a)
-    //     }
-    // }
-    // timer.stop("tree create");
-
-    // function linearQueryRange(range) {
-    //     let out = [];
-    //     let l, r;
-    //     for (let i = 0; i < intervals.length/2; i++) {
-    //         l = intervals[2*i];
-    //         r = intervals[2*i + 1];
-    //         if (l <= range[1] && range[0] <= r ) {
-    //             out.push(i);
-    //         }
-    //     }
-    //     return out;
-    // }
-
-    // for (let i = 0; i < 300; i++) {
-    //     const qVal1 = maxVal*0.2*Math.random();
-    //     const qVal2 = maxVal*0.2*Math.random();
-    //     var qInt;
-    //     if (qVal1 < qVal2) {
-    //         qInt = [qVal1, qVal2];
-    //     } else {
-    //         qInt = [qVal2, qVal1];
-    //     }
-    //     timer.start("linear");
-    //     var l1 = linearQueryRange(qInt).length;
-    //     timer.stop("linear", l1);
-    //     timer.start("tree");
-    //     var l2 = tree.queryRange(qInt).length;
-    //     timer.stop("tree", l2);
-    //     if (l1 != l2) console.log("diff");
-    // }
-
-    console.log("done");
-    
-
-   
-
-    // if (linearResult.sort().join(',') === treeResult.sort().join(',')) {
-    //     console.log("match");
-    // } else {
-    //     console.log(linearResult);
-    //     console.log(treeResult);
-    //     console.log(tree.toString());
-    //     console.log(tree.tree);
-    // }
-    // ================================================================
     
     var renderLoop = () => {
         viewManager.render(ctx);

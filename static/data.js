@@ -3,9 +3,9 @@
 
 import {VecMath} from "./VecMath.js";
 import {vec3} from "https://cdn.skypack.dev/gl-matrix";
-import { newId, DATA_TYPES, xyzToA, volume, parseXML, IntervalTree, timer } from "./utils.js";
+import { newId, DATA_TYPES, xyzToA, volume, parseXML, rangesOverlap, IntervalTree, timer } from "./utils.js";
 import { decompressB64Str, getNumPiecesFromVTS, getDataNamesFromVTS, getPointsFromVTS, getExtentFromVTS, getPointDataFromVTS, getDataLimitsFromVTS} from "./dataUnpacker.js"
-import { cleanupMarchData } from "./march.js";
+import { setupMarch, cleanupMarchData } from "./march.js";
 
 export {dataManager};
 
@@ -28,6 +28,10 @@ var dataManager = {
     datas: {},
     // keeps a track of the names of loaded datasets
     loaded: new Set(),
+    // directory of data objects corresponding to each dataset
+    directory: {},
+    // keep the config set too
+    configSet: {},
     // called by outside code to generate a new data object
     // config object form:
     // {
@@ -48,8 +52,38 @@ var dataManager = {
     //     "f": some function
     //     "accessType": "whole"/"complex"
     // }
-    
-    createData: async function(config){
+
+    setConfigSet: function(configSet) {
+        this.configSet = configSet;
+        for (let id in configSet) {
+            this.directory[id] = null;
+        }
+        console.log(this.directory);
+    },
+    getDataObj: async function(configId) {
+        // returns already created data object if it exists
+        if (this.directory[configId]) {
+            return this.directory[configId];
+        }
+        // else, creates a new one
+        var newDataObj = await this.createData(this.configSet[configId]);
+        this.directory[configId] = newDataObj;
+        await this.setupDataObj(newDataObj);
+        return newDataObj; 
+    },
+    setupDataObj: async function(newData) {
+        if (newData.multiBlock) {
+            var results = [];
+            for (let i = 0; i < newData.pieces.length; i++) {
+                results.push(setupMarch(newData.pieces[i]));
+            }
+            await Promise.all(results);
+            
+        } else {
+            await setupMarch(newData);
+        }
+    },
+    createData: async function(config) {
         const id = newId(this.datas);
         var newData = new this.Data(id);
         console.log(config.name);
@@ -60,10 +94,10 @@ var dataManager = {
             await newData.generateData(config);
         } else if (config.type == "raw") {
             // handle raw data
-            if (config.accessType == "complex") {
+            if (config.complexAvailable) {
                 // this is going to use the complex dataset handling mechanism
                 await newData.createComplex(config)
-            } else if (config.accessType == "whole") {
+            } else {
                 // create a new data object from a file
                 await newData.fromRawFile(config.path, DATA_TYPES[config.dataType], ...xyzToA(config.size))
             }
@@ -388,6 +422,8 @@ var dataManager = {
         this.createComplex = async function(config) {
             // first, save the config object
             this.config = config;
+            this.limits = config.limits;
+            console.log(this.limits)
             // assess what resolution the coarse representation should be
             // request the data at that resolution
             // for now, request the data at a fixed scale
@@ -417,12 +453,14 @@ var dataManager = {
             const limitsResponse = await fetch(pathSplit[0] + "_limits." + pathSplit[1]);
             const limitsBuffer = await limitsResponse.arrayBuffer();
             this.blockLimits = new DATA_TYPES[config.dataType](limitsBuffer)
+
+            this.logBlockDensity(32);
             
             // create an interval tree to contain the limits
-            this.blocksIntervalTree = new IntervalTree();
-            for (let i = 0; i < this.blockLimits.length; i += 2) {
-                this.blocksIntervalTree.insert([this.blockLimits[i], this.blockLimits[i + 1]], i/2);
-            }
+            // this.blocksIntervalTree = new IntervalTree();
+            // for (let i = 0; i < this.blockLimits.length; i += 2) {
+            //     this.blocksIntervalTree.insert([this.blockLimits[i], this.blockLimits[i + 1]], i/2);
+            // }
 
             // console.log(this.blockLimits)
 
@@ -440,8 +478,6 @@ var dataManager = {
 
             this.blockSize = blockSize;
 
-            this.limits = config.limits;
-            console.log(this.limits)
             this.initialise(
                 Math.floor(config.size.x/scale), 
                 Math.floor(config.size.y/scale), 
@@ -548,6 +584,33 @@ var dataManager = {
                 }
             } 
             return intersecting;
+        }
+        this.queryDeltaBlocks = function(oldRange, newRange) {
+            console.log(oldRange, newRange);
+            var out = {add:[], remove:[]};
+            var thisRange = [];
+            for (let i = 0; i < this.blockLimits.length/2; i++) {
+                thisRange[0] = this.blockLimits[2*i];
+                thisRange[1] = this.blockLimits[2*i + 1];
+                // four cases:
+                // only in new range -> goes into add
+                // only in old range -> goes into remove
+                // in both ranges -> nothing
+                // in neither ranges -> nothing
+                
+                if (rangesOverlap(thisRange, oldRange) && rangesOverlap(thisRange, newRange)) {
+                    // in both so don't do anything
+                    continue
+                } else if (rangesOverlap(thisRange, newRange)) {
+                    // only in new range
+                    out.add.push(i);
+                } else if (rangesOverlap(thisRange, oldRange)) {
+                    // only in old range
+                    out.remove.push(i);
+                }
+            }
+            console.log(out);
+            return out;
         }
         // same as above but returns a number
         this.queryBlocksCount = function(range, exclusive = [false, false]) {
@@ -697,6 +760,29 @@ var dataManager = {
             console.log("wrong values:", wrong);
             // console.log("wrong coords:", wrongCoords)
         }
+        this.logBlockDensity = function(n) {
+            const density = this.getBlockDensity(n);
+            console.log(density);
+            // find the max to scale by
+            var maxVal = 0;
+            for (let i = 0; i < density.length; i++) {
+                maxVal = Math.max(density[i], maxVal);
+            }
+            const rowLength = 32;
+            var outStr = "";
+            for (let i = 0; i < density.length; i++) {
+                outStr += "#".repeat(Math.round(density[i]*rowLength/maxVal)) + "\n";
+            }
+            console.log(outStr);
+        }
+        this.getBlockDensity = function(n) {
+            var density = [];
+            for (let i = 0; i <= n; i++) {
+                const val = i*(this.limits[1] - this.limits[0])/n + this.limits[0];
+                density.push(this.queryBlocksCount([val, val]));
+            }
+            return density;
+        }
     },
     deleteData: function(data) {
         // cleanup the data used by the march module
@@ -706,6 +792,11 @@ var dataManager = {
             }
         }
         this.loaded.delete(data.dataName);
+        for (let id in this.directory) {
+            if (this.directory[id] == data) {
+                this.directory[id] = null;
+            }
+        }
         cleanupMarchData(data);
         delete this.datas[data.id];
     }
@@ -727,3 +818,5 @@ function getIndex(x, y, z, size) {
 
 // need to intialise the coarse, whole data in the march module as part of init
 // then delete its copy of the data as it is only needed in the march module
+
+// needs method for getting the block # to add and remove given an old and new value range

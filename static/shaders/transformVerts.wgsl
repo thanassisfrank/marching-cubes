@@ -7,7 +7,6 @@ struct F32PointBuff {
 
 struct Data {
     @size(16) size : vec3<u32>,
-    @size(16) WGNum : vec3<u32>,
     @size(16) cellSize : vec3<f32>,
     data : array<u32>,
 };
@@ -29,7 +28,8 @@ fn getIndex3d(x : u32, y : u32, z : u32, size : vec3<u32>) -> u32 {
 
 @compute @workgroup_size({{WGTransformVertsCount}})
 fn main(
-    @builtin(global_invocation_id) gid : vec3<u32>
+    @builtin(global_invocation_id) gid : vec3<u32>,
+    @builtin(num_workgroups) wgnum : vec3<u32>
 ) {
     // each thread is tasked with transforming a single point
     
