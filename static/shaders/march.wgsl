@@ -135,7 +135,7 @@ fn main(
             coord = tables.vertCoord[i];
             var val : f32 = getVal(id.x + coord[0], id.y + coord[1], id.z + coord[2], cellScale);
             if (val > vars.threshold) {
-                code = code | (1u << i);
+                code |= (1u << i);
             }
             continuing {
                 i = i + 1u;
@@ -154,8 +154,8 @@ fn main(
                 break;
             }
             var c : array<i32, 2> = tables.edgeToVerts[edges[i]];
-            activeVerts = activeVerts | 1u << u32(c[0]);
-            activeVerts = activeVerts | 1u << u32(c[1]);
+            activeVerts |= 1u << u32(c[0]);
+            activeVerts |= 1u << u32(c[1]);
             continuing {
                 i = i + 1u;
             }

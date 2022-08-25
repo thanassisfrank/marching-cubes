@@ -138,8 +138,8 @@ fn cellPresent(neighbours : vec3<u32>) -> bool {
         return true;
     }
     var code = neighbours.z;
-    code = code | (neighbours.y << 1u);
-    code = code | (neighbours.x << 2u);
+    code |= (neighbours.y << 1u);
+    code |= (neighbours.x << 2u);
 
     var i = 0u;
     loop {
@@ -292,7 +292,7 @@ fn main(
             c = tables.vertCoord[i];
             val = blockData[(lid.x + c[0])*cellScale][(lid.y + c[1])*cellScale][(lid.z + c[2])*cellScale];
             if (val > dataInfo.threshold) {
-                code = code | (1u << i);
+                code |= (1u << i);
             }
 
             continuing {i = i + 1u;}

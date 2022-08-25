@@ -21,11 +21,11 @@ var<workgroup> blockOffset : u32;
 fn nextPowerOf2(a : u32) -> u32 {
     var v : u32 = a;
     v = v - 1u;
-    v = v | v >> 1u;
-    v = v | v >> 2u;
-    v = v | v >> 4u;
-    v = v | v >> 8u;
-    v = v | v >> 16u;
+    v |= v >> 1u;
+    v |= v >> 2u;
+    v |= v >> 4u;
+    v |= v >> 8u;
+    v |= v >> 16u;
     v = v + 1u;
     return v;
 }
