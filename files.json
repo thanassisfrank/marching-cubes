@@ -250,6 +250,11 @@
         "contentType": "text/plain"
     },
     {
+        "path": "shaders/updateFineData.wgsl",
+        "encoding": "utf8",
+        "contentType": "text/plain"
+    },
+    {
         "path": "shaders/shader.wgsl",
         "encoding": "utf8",
         "contentType": "text/plain"

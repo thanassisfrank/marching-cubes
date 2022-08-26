@@ -609,7 +609,7 @@ var dataManager = {
                     out.remove.push(i);
                 }
             }
-            console.log(out);
+            // console.log(out);
             return out;
         }
         // same as above but returns a number

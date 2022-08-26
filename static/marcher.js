@@ -85,11 +85,13 @@ var marcherManager = {
                 this.fineData;
                 this.finePoints;
                 this.limits = data.limits; // [min, max]
-                this.blocksSize = data.blocksSize; // size of dataset in blocks (x, y, z)
-                this.blockVol = volume(data.blockSize); // total number of blocks in dataset
+                this.blocksSize = data.blocksSize; // size of a block
+                this.blocksVol = volume(data.blocksSize); // total number of blocks in the dataset
+                this.blockVol = volume(data.blockSize); // the number of points in a block
+                console.log(this.blockVol)
                 this.activeBlocks; // temp storage for pulling the immediately needed blocks through from server
                 this.blockLocations;  // a directory of the blocks loaded into the marcher's store
-                this.loadedRange = [null, null];
+                this.loadedRange = [data.limits[0]-1, data.limits[0]-1];
                 this.emptyLocations = []; // list of all locations currently unoccupied or holding redundant data
 
                 this.firstTime = true;
@@ -164,42 +166,23 @@ var marcherManager = {
                         this.activeBlocks = this.data.queryBlocks([threshold, threshold]);
                         // transfer the active blocks # to the march module
                         await updateActiveBlocks(this);
-                        // if this is the first time or if not in loaded range
-                        console.log(this.firstTime);
 
-                        if (this.firstTime || !rangesOverlap([threshold, threshold], this.marchData.loadedRange)) {
-                            console.log("updating data stored")
-                            // find what new ranges will fill both stores of data, starting from the active blocks
-                            // main -> this  marchModule -> for march instance
-                            // const newRanges = [[threshold, threshold], [threshold, threshold]];
-                            // const newRanges = [[200, 200], [200, 200]];
-                            const newRanges = this.expandToFill([threshold, threshold], this.activeBlocks.length);
-                            console.log(newRanges);
+                        const [newMarchDataRange, newMarchBlocksCount] = this.expandRangeToFill(
+                            this.data, 
+                            this.marchData.blocksBudget, 
+                            this.activeBlocks.length, 
+                            [threshold, threshold]
+                        )
 
-                            // get the ids of blocks that need to be added/removed from data stored here
-                            if (this.firstTime) {
-                                await this.updateFineData(this.data.queryBlocks(newRanges.main), []);
-                            } else {
-                                const blockDeltaIDs = data.queryDeltaBlocks(this.loadedRange, newRanges.main);
-                                // update the data stored here
-                                await this.updateFineData(blockDeltaIDs.add, blockDeltaIDs.remove);
-                            }
-                            this.loadedRange = newRanges.main;
-                            
-                            // update data stored in march instance
-                            const newMarchBlocks = await this.data.queryBlocks(newRanges.marchModule);
-                            // work out what block Locations buffer should be
-                            var marchBlockLocations = new Int32Array(this.blockLocations.length)
-                            marchBlockLocations.fill(-1);
-                            for (let i = 0; i < newMarchBlocks.length; i++) {
-                                marchBlockLocations[newMarchBlocks[i]] = i;
-                            }
-                            await updateMarchFineData(this, this.getFineData(newMarchBlocks), marchBlockLocations);
-                            //await updateMarchFineData(this, this.fineData, this.blockLocations);
-                            this.marchData.loadedRange = newRanges.marchModule;
-
-                            this.firstTime = false;
-                        }
+                        const blockDeltaIDs = data.queryDeltaBlocks(this.marchData.loadedRange, newMarchDataRange);
+                        // update the data stored here
+                        await updateMarchFineData(
+                            this, 
+                            blockDeltaIDs.add, 
+                            blockDeltaIDs.remove,
+                            await this.data.fetchBlocks(blockDeltaIDs.add)
+                        );
+                        this.marchData.loadedRange = newMarchDataRange;
 
                         await marchFine(this, this.mesh, threshold);
 
@@ -210,77 +193,52 @@ var marcherManager = {
             }
         }
 
-        this.expandToFill = function(range, num) {
-            // expand the number of blocks loaded in the march module
-
-            var expandRangeToFill = (data, budgetCount, loadedCount, loadedRange) => {
-                var getNextConst = (err) => {
-                    const kp = 0.08;
-                    const kd = 0.045;
-                    const ki = 0.09;
-                    const p = err[0];
-                    const d = err[1] ? err[0] - err[1] : 0;
-                    const i = err.reduce((p, c) => p + c);
-                    //console.log("p:", p, "d:", d, "i:", i);
-                    return kp*p + kd*d + ki*i;
-                }
-                var valRange = data.limits[1] - data.limits[0];
-                var newLimits, rangeDelta, newBlocksCount;
-
-                // set the target to be lower  so that convergence below the maximum is faster
-                var targetBlocksCount = 0.95*budgetCount;
-                // error - number of empty block spaces in the buffer
-                // positve - more blocks can be added   negative - too many blocks
-                var err = [(targetBlocksCount - loadedCount)/targetBlocksCount];
-                
-                do {
-                    
-                    // the range of values for the new blocks to load
-                    rangeDelta = valRange*getNextConst(err);
-                    newLimits = [
-                        Math.max(loadedRange[0] - rangeDelta, data.limits[0]), 
-                        Math.min(loadedRange[1] + rangeDelta, data.limits[1])
-                    ];
-                    //console.log(newLimits);
-                    // total # of new blocks to add
-                    newBlocksCount = 0;
-                    // new blocks from left
-                    newBlocksCount += data.queryBlocksCount([newLimits[0], loadedRange[0]], [false, true]);
-                    // new blocks from right
-                    newBlocksCount += data.queryBlocksCount([loadedRange[1], newLimits[1]], [true, false]);
-
-                    // may want to bias this so that we tend towards a small positive value
-                    err.unshift((targetBlocksCount - loadedCount - newBlocksCount)/targetBlocksCount);
-
-                    //console.log(err[0]);
-
-                    // keep going if less than 5% blocks empty and less than 20 passes have been done or if too many blocks are selected
-                    
-                } while ((err[0] > 0.05 && err.length < 20) || err[0] < -budgetCount/targetBlocksCount);
-
-                return [newLimits, newBlocksCount];
+        this.expandRangeToFill = function (data, budgetCount, loadedCount, loadedRange) {
+            var getNextConst = (err) => {
+                const kp = 0.08;
+                const kd = 0.045;
+                const ki = 0.09;
+                const p = err[0];
+                const d = err[1] ? err[0] - err[1] : 0;
+                const i = err.reduce((p, c) => p + c);
+                //console.log("p:", p, "d:", d, "i:", i);
+                return kp*p + kd*d + ki*i;
             }
+            var valRange = data.limits[1] - data.limits[0];
+            var newLimits, rangeDelta, newBlocksCount;
 
-            // expand the range to fill the march module's storage
-            const [newMarchDataRange, newMarchBlocksCount] = expandRangeToFill(
-                this.data, 
-                this.marchData.blocksBudget, 
-                num, 
-                range
-            );
+            // set the target to be lower  so that convergence below the maximum is faster
+            var targetBlocksCount = 0.95*budgetCount;
+            // error - number of empty block spaces in the buffer
+            // positve - more blocks can be added   negative - too many blocks
+            var err = [(targetBlocksCount - loadedCount)/targetBlocksCount];
             
-            // expand this range again to fill the marcher's memory
-            const [newDataRange, newBlocksCount] = expandRangeToFill(
-                this.data, 
-                this.blocksBudget, 
-                num + newMarchBlocksCount, 
-                newMarchDataRange
-            );
+            do {
+                
+                // the range of values for the new blocks to load
+                rangeDelta = valRange*getNextConst(err);
+                newLimits = [
+                    Math.max(loadedRange[0] - rangeDelta, data.limits[0]), 
+                    Math.min(loadedRange[1] + rangeDelta, data.limits[1])
+                ];
+                //console.log(newLimits);
+                // total # of new blocks to add
+                newBlocksCount = 0;
+                // new blocks from left
+                newBlocksCount += data.queryBlocksCount([newLimits[0], loadedRange[0]], [false, true]);
+                // new blocks from right
+                newBlocksCount += data.queryBlocksCount([loadedRange[1], newLimits[1]], [true, false]);
 
-            return {
-                main: newDataRange, 
-                marchModule: newMarchDataRange
-            };
+                // may want to bias this so that we tend towards a small positive value
+                err.unshift((targetBlocksCount - loadedCount - newBlocksCount)/targetBlocksCount);
+
+                //console.log(err[0]);
+
+                // keep going if less than 5% blocks empty and less than 20 passes have been done or if too many blocks are selected
+                
+            } while ((err[0] > 0.05 && err.length < 20) || err[0] < -budgetCount/targetBlocksCount);
+
+            return [newLimits, newBlocksCount];
         }
         // takes lists of block ids to add/remove and alters finedata to match
         this.updateFineData = async function(addBlockIDs, removeBlockIDs) {
@@ -314,6 +272,7 @@ var marcherManager = {
                         const blockData = newBlockData.slice(i*this.blockVol, (i+1)*this.blockVol);
                         this.fineData.set(blockData, oldBlockLoc*this.blockVol);
                     }
+                    this.blockLocations[addBlockIDs[i]] = oldBlockLoc;
                     added++;
                 } else {
                     this.emptyLocations.push(this.blockLocations[removeBlockIDs[i]]);
