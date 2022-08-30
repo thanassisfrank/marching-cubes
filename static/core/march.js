@@ -45,15 +45,17 @@ export async function setupMarchModule() {
 
 export async function setupMarch(...args) {
     if (module == "gpu") {
-        await gpu.setupMarch(...args)
+        await gpu.setupMarch(...args);
     } else if (module == "wasm") {
-        await wasm.setupData(...args)
+        await wasm.setupData(...args);
     }
 }
 
 export async function setupMarchFine(...args) {
     if (module == "gpu") {
-        await gpu.setupMarchFine(...args)
+        await gpu.setupMarchFine(...args);
+    } else if (module == "wasm") {
+        await wasm.setupMarchFine(...args);
     }
 }
 
@@ -86,18 +88,24 @@ export async function marchMulti(datas, meshes, threshold) {
 export async function updateActiveBlocks(...args) {
     if (module == "gpu") {
         await gpu.updateActiveBlocks(...args);
+    } else if (module == "wasm") {
+        wasm.updateActiveBlocks(...args);
     }
 }
 
 export async function updateMarchFineData(...args) {
     if (module == "gpu") {
         await gpu.updateMarchFineData(...args);
+    } else if (module == "wasm") {
+        wasm.updateMarchFineData(...args);
     }
 }
 // called when marching
 export async function marchFine(...args) {
     if (module == "gpu") {
         await gpu.marchFine(...args);
+    } else if (module == "wasm") {
+        wasm.generateMeshFineWASM(...args);
     }
 }
 

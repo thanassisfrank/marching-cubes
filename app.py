@@ -11,8 +11,9 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 static_path = "static/"
 
 port = 8080
-files = json.loads(open("files.json", "r").read())
-datasets = json.loads(open(static_path + "datasets.json", "r").read())
+# files = json.loads(open("files.json", "r").read())
+file_types = json.loads(open("fileTypes.json", "r").read())
+datasets = json.loads(open(static_path + "core/datasets.json", "r").read())
 struct_data_formats = {
     "float32": "f",
     "uint8": "c"
@@ -46,18 +47,23 @@ class requestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         file_name = self.path[1:]
         try:
-            file_desc = get_file_desc(files, file_name)
-            if not file_desc:
-                raise OSError("file not in directory")
+            # file_desc = get_file_desc(files, file_name)
+            # get the extension from the file
+            extension = self.path.split(".")[1]
+            file_desc = file_types[extension]
+            full_path = static_path + self.path[1:]
+            print(full_path)
+            # if not file_desc:
+            #     raise OSError("file not in directory")
             if file_desc["encoding"]:
-                file = open(static_path + file_name, "r")
+                file = open(full_path, "r")
                 self.send_response(200)
                 self.send_header("content-type", file_desc["contentType"])
                 self.end_headers()
                 self.wfile.write(bytes(file.read(), file_desc["encoding"]))
                 file.close()
             else:
-                file = open(static_path + file_name, "rb")
+                file = open(full_path, "rb")
                 self.send_response(200)
                 self.send_header("content-type", file_desc["contentType"])
                 self.end_headers()

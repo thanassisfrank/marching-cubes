@@ -6,10 +6,10 @@
 
 import { dataManager } from "./data.js";
 import { meshManager } from "./mesh.js";
-import { renderModes } from "./view.js";
+// import { renderModes } from "./view.js";
 import { newId, volume, getRangeDeltas, rangesOverlap } from "./utils.js";
 import { maxBufferSize, setupMarchFine, march, marchFine, updateActiveBlocks, updateMarchFineData } from "./march.js";
-import { buffersUpdateNeeded, updateMeshBuffers, deleteBuffers, renderView } from "./render.js";
+import { buffersUpdateNeeded, updateMeshBuffers, deleteBuffers, renderView, renderModes} from "./render.js";
 
 
 export {marcherManager}
@@ -50,6 +50,8 @@ var marcherManager = {
         this.users = 0;
         // stores a reference to an instance of data object
         this.data = data;
+        this.size = data.size;
+        this.fullSize = data.fullSize;
         // flag for if the marcher is for a multiblock dataset and so is also multiblock
         this.multiBlock = false;
 
@@ -106,7 +108,8 @@ var marcherManager = {
                 // the maximum number of blocks that can be loaded here
                 const maxBytesPerBlock = Math.max(data.bytesPerBlockData(), data.bytesPerBlockPoints())
                 this.blocksBudget = Math.min(Math.floor(marcherManager.storageBudget/maxBytesPerBlock), volume(data.blocksSize)*1.1);
-                this.marchData.blocksBudget = Math.min(Math.floor(maxBufferSize/maxBytesPerBlock), volume(data.blocksSize))/2;
+                // this.marchData.blocksBudget = Math.min(Math.floor(maxBufferSize/maxBytesPerBlock), volume(data.blocksSize))/2;
+                this.marchData.blocksBudget = Math.min(2097152, volume(data.blocksSize));
                 console.log("march module budget:", this.marchData.blocksBudget);
 
                 const maxFinePoints = marcherManager.storageBudget/this.dataType.BYTES_PER_ELEMENT
@@ -164,6 +167,7 @@ var marcherManager = {
                     } else {
                         // get the block numbers that are active
                         this.activeBlocks = this.data.queryBlocks([threshold, threshold]);
+                        console.log(this.activeBlocks.length);
                         // transfer the active blocks # to the march module
                         await updateActiveBlocks(this);
 

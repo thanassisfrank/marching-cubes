@@ -17,10 +17,17 @@ export {
     renderPoints, 
     deleteBuffers, 
     clearScreen, 
-    resizeRenderingContext
+    resizeRenderingContext,
+    renderModes
 };
 
 var module;
+
+const renderModes = {
+    ISO_SURFACE: 1,
+    DATA_POINTS: 2,
+    ISO_POINTS: 3
+}
 
 function autoSetRenderModule() {
     if (navigator.gpu) {

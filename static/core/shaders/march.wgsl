@@ -5,14 +5,14 @@ struct Data {
     data : array<u32>,
 };
 struct DataInfo {
-    @size(16) cellSize : vec3<f32>,  // the dimensions of the virtual cells being marched
-    structuredGrid : u32           // whether the 
+    @size(16) cellSize : vec3<f32>,  // the dimensions cells in space compared to normal size (scaling factor)
+    structuredGrid : u32             // whether the 
 }
 struct Vars {
     threshold : f32,
     currVert : atomic<u32>,
     currIndex : atomic<u32>,
-    cellScale : u32,
+    cellScale : u32,                // the scaling of a cell in terms of real cells covered
 };
 struct Tables {
     vertCoord : array<array<u32, 3>, 8>,

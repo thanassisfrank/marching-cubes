@@ -1,26 +1,18 @@
 // view.js
 // handles the creation of view objects, their management and deletion
 
-import { get, show, isVisible, toRads, newId, timer } from "./utils.js";
-import { VecMath } from "./VecMath.js";
+import { get, show, isVisible, toRads, newId, timer } from "./core/utils.js";
+import { VecMath } from "./core/VecMath.js";
 import {mat4} from 'https://cdn.skypack.dev/gl-matrix';
 
-import { meshManager } from "./mesh.js";
-import { cameraManager } from "./camera.js";
-import { marcherManager } from "./marcher.js";
+import { cameraManager } from "./core/camera.js";
+import { marcherManager } from "./core/marcher.js";
 
-import {clearScreen, renderView} from "./render.js";
-
-import { march, marchMulti, marchFine } from "./march.js";
-import { dataManager } from "./data.js";
+import {clearScreen, renderModes} from "./core/render.js";
 
 export {viewManager, renderModes};
 
-const renderModes = {
-    ISO_SURFACE: 1,
-    DATA_POINTS: 2,
-    ISO_POINTS: 3
-}
+
 
 var viewManager = {
     
@@ -135,8 +127,11 @@ var viewManager = {
             view.camera.changeDist(e.deltaY);
         };
         slider.oninput = function() {
-            view.updateThreshold(parseFloat(this.value));
+            view.updateThreshold(parseFloat(this.value), false);
         };
+        slider.onmouseup = function() {
+            view.updateThreshold(parseFloat(this.value), true);
+        }
 
 
         // might want another event listener for when the frame element is moved or resized 
@@ -192,27 +187,18 @@ var viewManager = {
                 this.updateThreshold(this.threshold);
             }            
         }     
-        this.updateThreshold = async function(val) {
+        this.updateThreshold = async function(val, fine) {
             this.threshold = val;
             // only update the mesh if marching is needed
             if (this.renderMode == renderModes.DATA_POINTS) return;
-
-            // stops the fine timer running if it is
             
-            
-            this.marcher.march(this.threshold);
-
-            if (this.marcher.data.complex) {
-                clearTimeout(this.fineTimer.timer);
-                //console.log("deleted:", this.fineTimer.timer)
-
-                var that = this;
-
-                this.fineTimer.timer = setTimeout(() => {
-                    that.marcher.marchFine(that.threshold);
-                }, this.fineTimer.duration);
-                //console.log("created:",this.fineTimer.timer)
+            if (fine) {
+                console.log("fine")
+                this.marcher.marchFine(this.threshold);
+            } else {
+                this.marcher.march(this.threshold);
             }
+
         }
         this.getFrameElem = function() {
             return get(this.id).children[0];

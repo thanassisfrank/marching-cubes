@@ -1,13 +1,42 @@
 #include <emscripten.h>
 #include <stdlib.h>
 
-//memory loaded with tables in order vertCoordTable, edgeTable, edgeToVertsTable, triTable
+// build command:
+// emcc -O2 -s STANDALONE_WASM=1 -s ERROR_ON_UNDEFINED_SYMBOLS=0 -s MALLOC=”dlmalloc” -s INITIAL_MEMORY=67108864 --no-entry -o march.wasm march.c
+
+
+#define blockSizeX 4
+#define blockSizeY 4
+#define blockSizeZ 4
+#define blockDataLength 125
 
 typedef float vert[3];
 typedef int bool; 
 enum {false = 0, true = 1};
 
-extern void console_log(float);
+typedef unsigned int uint;
+// typedef float Block[(blockSizeX+1)*(blockSizeY+1)*(blockSizeZ+1)];
+
+
+struct Vec3Int {
+    int x;
+    int y;
+    int z;
+};
+
+struct Vec3Float {
+    float x;
+    float y;
+    float z;
+};
+
+struct Counts {
+    int verts;
+    int indices;
+};
+
+extern void console_log_float(float);
+extern void console_log_int(int);
 extern void console_log_bin(int);
 
 int vertCoordTable[8][3] = {
@@ -554,31 +583,72 @@ int triTable[256][15] = {
     {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1}
 };
 
-float* data;
-int dataLength;
+struct Vec3Int neighbourConfigs[8] = {
+    {0, 0, 0}, // body point
+    {0, 0, 1}, // z+ face neighbour
+    {0, 1, 0}, // y+ face neighbour
+    {0, 1, 1}, // x+ edge neighbour
+    {1, 0, 0}, // x+ face neighbour
+    {1, 0, 1}, // y+ edge neighbour
+    {1, 1, 0}, // z+ edge neighbour
+    {1, 1, 1}  // corner neighbour 
+};
+
+int requiredNeighbours[8][7] = {
+    {-1, -1, -1, -1, -1, -1, -1}, // the cell itself
+    { 1, -1, -1, -1, -1, -1, -1}, // z+ face neighbour
+    { 2, -1, -1, -1, -1, -1, -1}, // y+ face neighbour
+    { 1,  2,  3, -1, -1, -1, -1}, // x+ edge neighbour
+    { 4, -1, -1, -1, -1, -1, -1}, // x+ face neighbour
+    { 1,  4,  5, -1, -1, -1, -1}, // y+ edge neighbour
+    { 2,  4,  6, -1, -1, -1, -1}, // z+ edge neighbour
+    { 1,  2,  3,  4,  5,  6,  7}  // corner neighbour 
+};
+
+struct Vec3Int blockDimensions = {blockSizeX, blockSizeY, blockSizeZ};
+int blockVol = blockSizeX*blockSizeY*blockSizeZ;
+
+
+// float* data;
+// int dataLength;
 float* points;
 int pointsLength;
 int* codes;
 int codesCount;
 
-int sizeX;
-int sizeY;
-int sizeZ;
+// struct Vec3Int size;
+
 float* verts;
 int vertsNum;
-int* indices;
+uint* indices;
 int indicesNum;
 
 
+int* EMSCRIPTEN_KEEPALIVE allocateBuffer(int byteLength) {
+    return malloc(byteLength);
+}
+
+void EMSCRIPTEN_KEEPALIVE freeBuffer(int* location) {
+    free(location);
+}
+
 // data length is the number of dataPoints
-float* EMSCRIPTEN_KEEPALIVE assignDataLocation(int x, int y, int z) {
-    //console_log(6421);
-    dataLength = x*y*z;
-    sizeX = x;
-    sizeY = y;
-    sizeZ = z;
-    data = malloc(dataLength * sizeof(float));
-    return data;
+// float* EMSCRIPTEN_KEEPALIVE assignDataLocation(int x, int y, int z) {
+//     //console_log(6421);
+//     dataLength = x*y*z;
+//     size.x = x;
+//     size.y = y;
+//     size.z = z;
+//     data = malloc(dataLength * sizeof(float));
+//     return data;
+// }
+
+struct Vec3Int EMSCRIPTEN_KEEPALIVE posFromIndex(int i, struct Vec3Int size) {
+    return (struct Vec3Int){i/(size.y*size.z), (i/size.z)%size.y, i%size.z};
+}
+
+uint EMSCRIPTEN_KEEPALIVE indexFromPos(struct Vec3Int pos, struct Vec3Int size) {
+    return (uint)(size.z * size.y * pos.x + size.z * pos.y + pos.z);
 }
 
 float* EMSCRIPTEN_KEEPALIVE assignPointsLocation(int x, int y, int z) {
@@ -588,28 +658,29 @@ float* EMSCRIPTEN_KEEPALIVE assignPointsLocation(int x, int y, int z) {
 }
 
 // calculate the codes
-void calculateCodes(float threshold) {
+void calculateCodes(float* data, struct Vec3Int size, float threshold) {
     int index;
     //console_log((float)dataLength);
-    int X = sizeX - 1;
-    int Y = sizeY - 1;
-    int Z = sizeZ - 1;
-    codesCount = X*Y*Z;
+    struct Vec3Int cellsSize;
+    cellsSize.x = size.x - 1;
+    cellsSize.y = size.y - 1;
+    cellsSize.z = size.z - 1;
+    codesCount = cellsSize.x*cellsSize.y*cellsSize.z;
     int count = 0;
     bool shown = false;
     //console_log(sizeX);
-    for (int i = 0; i < X; i++) {
-        for (int j = 0; j < Y; j++) {
-            for (int k = 0; k < Z; k++) {
-                codes[Y * Z * i + Z * j + k] = 0;
+    for (int i = 0; i < cellsSize.x; i++) {
+        for (int j = 0; j < cellsSize.y; j++) {
+            for (int k = 0; k < cellsSize.z; k++) {
+                codes[cellsSize.y * cellsSize.z * i + cellsSize.z * j + k] = 0;
                 for (int l = 0; l < 8; l++) {
                     
                     int* c = vertCoordTable[l];
                     // indexing data needs full dimensions
-                    index = sizeY * sizeZ * (i + c[0]) + sizeZ * (j + c[1]) + k + c[2];
+                    index = size.y * size.z * (i + c[0]) + size.z * (j + c[1]) + k + c[2];
                     float val = data[index];
                     // indexing codes uses X Y Z (dim - 1)
-                    codes[Y * Z * i + Z * j + k] |= (val > threshold) << l;
+                    codes[cellsSize.y * cellsSize.z * i + cellsSize.z * j + k] |= (val > threshold) << l;
 
                     count++;
                     // if (sizeX == 0 && shown == false) {
@@ -628,12 +699,19 @@ float* EMSCRIPTEN_KEEPALIVE getVertsLocation() {
     return verts;
 }
 
-int* EMSCRIPTEN_KEEPALIVE getIndicesLocation() {
+uint* EMSCRIPTEN_KEEPALIVE getIndicesLocation() {
     return indices;
 }
 
-// enumeration to see how many verts/indicies are generated
 int EMSCRIPTEN_KEEPALIVE getVertsCount() {
+    return vertsNum;
+}
+int EMSCRIPTEN_KEEPALIVE getIndicesCount() {
+    return indicesNum;
+}
+
+// enumeration to see how many verts/indicies are generated
+int EMSCRIPTEN_KEEPALIVE calcVertsCount() {
     int total = 0;
     for (int i = 0; i < codesCount; i++) {
         // loop through each code
@@ -648,7 +726,7 @@ int EMSCRIPTEN_KEEPALIVE getVertsCount() {
     return total;
 }
 
-int EMSCRIPTEN_KEEPALIVE getIndicesCount() {
+int EMSCRIPTEN_KEEPALIVE calcIndicesCount() {
     int total = 0;
     for (int i = 0; i < codesCount; i++) {
         // loop through each code
@@ -663,7 +741,7 @@ int EMSCRIPTEN_KEEPALIVE getIndicesCount() {
     return total;
 }
 
-void EMSCRIPTEN_KEEPALIVE addIndices(int* indices, int* currInd, int currVert, int code) { 
+void EMSCRIPTEN_KEEPALIVE addIndices(uint* indices, uint* currInd, uint currVert, int code) { 
     int* tri = triTable[code];
     for (int i = 0; i < 15; i++) {
         if (tri[i] != -1) {
@@ -678,16 +756,13 @@ void EMSCRIPTEN_KEEPALIVE addIndices(int* indices, int* currInd, int currVert, i
 // get the positions of the verts for a cell
 void EMSCRIPTEN_KEEPALIVE addVerts(
     float* verts,
-    int* curr, 
+    uint* curr, 
     int code, 
-    int x, 
-    int y, 
-    int z, 
+    struct Vec3Int pointPos,
     float* data, 
     float* points,
-    int X, 
-    int Y, 
-    int Z, 
+    struct Vec3Int size,
+    struct Vec3Float scale,
     float threshold, 
     bool pointsBool
 ) {
@@ -711,8 +786,8 @@ void EMSCRIPTEN_KEEPALIVE addVerts(
                 vertCoordTable[connected[1]][2]
             };
 
-            int aInd = Y*Z*(a[0] + x) + Z*(a[1] + y) + a[2] + z;
-            int bInd = Y*Z*(b[0] + x) + Z*(b[1] + y) + b[2] + z;
+            int aInd = size.y*size.z*(a[0] + pointPos.x) + size.z*(a[1] + pointPos.y) + a[2] + pointPos.z;
+            int bInd = size.y*size.z*(b[0] + pointPos.x) + size.z*(b[1] + pointPos.y) + b[2] + pointPos.z;
             // the values at the endpoints of the edge
             float va = data[aInd];
             float vb = data[bInd];
@@ -735,9 +810,9 @@ void EMSCRIPTEN_KEEPALIVE addVerts(
                 verts[3*(*curr) + 1] = pa[1]*(1.0-fac) + pb[1]*fac;
                 verts[3*(*curr) + 2] = pa[2]*(1.0-fac) + pb[2]*fac;
             } else {
-                verts[3*(*curr) + 0] = (float)a[0]*(1-fac) + (float)b[0]*fac + (float)x;
-                verts[3*(*curr) + 1] = (float)a[1]*(1-fac) + (float)b[1]*fac + (float)y;
-                verts[3*(*curr) + 2] = (float)a[2]*(1-fac) + (float)b[2]*fac + (float)z;
+                verts[3*(*curr) + 0] = ((float)a[0]*(1-fac) + (float)b[0]*fac + (float)pointPos.x)*scale.x;
+                verts[3*(*curr) + 1] = ((float)a[1]*(1-fac) + (float)b[1]*fac + (float)pointPos.y)*scale.y;
+                verts[3*(*curr) + 2] = ((float)a[2]*(1-fac) + (float)b[2]*fac + (float)pointPos.z)*scale.z;
             }
 
             (*curr)++;
@@ -748,51 +823,489 @@ void EMSCRIPTEN_KEEPALIVE addVerts(
 }
 
 // extract isosurface 
-int EMSCRIPTEN_KEEPALIVE generateMesh(float threshold, bool pointsBool) {
+int EMSCRIPTEN_KEEPALIVE generateMesh(
+    float* data,
+    int dataSizeX,
+    int dataSizeY,
+    int dataSizeZ,
+    float scaleX,   // controls scaling, doesn't affect how many cells a virtual cell is
+    float scaleY,   // controls scaling, doesn't affect how many cells a virtual cell is
+    float scaleZ,   // controls scaling, doesn't affect how many cells a virtual cell is
+    float threshold, 
+    bool pointsBool
+) {
     //console_log(123);
-    int codesCount = (sizeX - 1) * (sizeY - 1) * (sizeZ - 1);  
+    struct Vec3Int size;
+    size.x = dataSizeX;
+    size.y = dataSizeY;
+    size.z = dataSizeZ;
+
+    struct Vec3Float scale = {scaleX, scaleY, scaleZ};
+
+    // console_log_int(dataSizeX);
+    // console_log_int(dataSizeY);
+    // console_log_int(dataSizeZ);
+    // console_log_float(data[70]);
+
+    int codesCount = (size.x - 1) * (size.y - 1) * (size.z - 1);  
     codes = (int*) malloc(codesCount * sizeof(int));
-    calculateCodes(threshold);
+    calculateCodes(data, size, threshold);
 
     //console_log(1234);
-    vertsNum = getVertsCount();
+    vertsNum = calcVertsCount();
     verts = (float*) malloc(vertsNum * 3 * sizeof(float));
     
-    indicesNum = getIndicesCount();
-    indices = (int*) malloc(indicesNum * sizeof(int));
+    indicesNum = calcIndicesCount();
+    indices = (uint*) malloc(indicesNum * sizeof(uint));
     
-    int X = sizeX-1;
-    int Y = sizeY-1;
-    int Z = sizeZ-1;
+    struct Vec3Int cellsSize;
+    cellsSize.x = size.x - 1;
+    cellsSize.y = size.y - 1;
+    cellsSize.z = size.z - 1;
+
+    // int X = sizeX-1;
+    // int Y = sizeY-1;
+    // int Z = sizeZ-1;
     // holds current vertex number in array
-    int currVert = 0;
-    int currInd = 0;
-    int codeIndex = 0;
+    uint currVert = 0;
+    uint currInd = 0;
+    uint codeIndex = 0;
 
-    console_log_bin(pointsBool);
+    // console_log_bin(pointsBool);
 
-    for (int i = 0; i < X; i++) {
-        for (int j = 0; j < Y; j++) {
-            for (int k = 0; k < Z; k++) {
-                codeIndex = Y * Z * i + Z * j + k;
+    for (int i = 0; i < cellsSize.x; i++) {
+        for (int j = 0; j < cellsSize.y; j++) {
+            for (int k = 0; k < cellsSize.z; k++) {
+                codeIndex = cellsSize.y * cellsSize.z * i + cellsSize.z * j + k;
                 // loop throught all generated codes
                 if (codes[codeIndex] == 0 || codes[codeIndex] == 255) {
                     continue;
                 }
                 addIndices(indices, &currInd, currVert, codes[codeIndex]);
-                addVerts(verts, &currVert, codes[codeIndex], i, j, k, data, points, sizeX, sizeY, sizeZ, threshold, pointsBool);
+                struct Vec3Int pointPos = {i, j, k};
+                // pointPos.x = i;
+                // pointPos.y = j;
+                // pointPos.z = k;
+                addVerts(verts, &currVert, codes[codeIndex], pointPos, data, points, size, scale, threshold, pointsBool);
                 // calculate indices values
             }
         }
     }
     //console_log(12345);
+    free(codes);
     return vertsNum;
 }
 
 
+
+
+// fine marching portion ===============================================================================================================================================
+
+
+//
+float getFineDataValue(float* fineData, uint slotNum, struct Vec3Int pos) {
+    return fineData[slotNum*blockVol + blockDimensions.y * blockDimensions.z * pos.x + blockDimensions.z * pos.y + pos.z];
+}
+
+void getNeighboursPresent(bool* out, int* neighbourSlots, struct Vec3Int blockPos, int* blockLocations, struct Vec3Int blocksSize) {
+    out[0] = true;
+    for (int i = 1; i < 8; i++) {
+        struct Vec3Int neighbourPos = {
+            blockPos.x + neighbourConfigs[i].x,
+            blockPos.y + neighbourConfigs[i].y,
+            blockPos.z + neighbourConfigs[i].z
+        };
+        if (neighbourPos.x < blocksSize.x && neighbourPos.y < blocksSize.y && neighbourPos.z < blocksSize.z) {
+            //neighbour is within boundary
+            uint neighbourIndex = indexFromPos(neighbourPos, blocksSize);
+            neighbourSlots[i] = blockLocations[neighbourIndex];
+            if (neighbourSlots[i] != -1) {
+                // the face neighbour is part of the loaded dataset
+                // now increment the correct dimenson of cellsSize
+                out[i] = true;
+            } else {
+                out[i] = false;
+            }
+        }
+    }
+}
+
+bool neededNeighboursPresent(struct Vec3Int cellPos, bool* neighboursPresent) {
+    int code = (cellPos.z == blockDimensions.z - 1) | 
+               ((cellPos.y == blockDimensions.y - 1) << 1) | 
+               ((cellPos.x == blockDimensions.x - 1) << 2);
+    if (code == 0) {
+        // cell doesn't need any neighbours
+        return true;
+    }
+    for (int i = 0; i < 7; i++) {
+        if (requiredNeighbours[code][i] == -1) {
+            break;
+        } else if (neighboursPresent[requiredNeighbours[code][i]] == false) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// struct Counts getCountsForBlock(uint blockID, int* blockLocations, float* fineData, float threshold, struct Vec3Int blocksSize) {
+    
+// }
+
+void populateBlockData(float* fineData, float blockData[5][5][5], int* slotNums) {
+    for (int i = 0; i < blockSizeX; i++) {
+        for (int j = 0; j < blockSizeY; j++) {
+            for (int k = 0; k < blockSizeZ; k++) {
+                // calc a vector that says on what sides this point needs data from neighbour cells
+                struct Vec3Int neighboursNeeded = {
+                    i == blockSizeX - 1,
+                    j == blockSizeY - 1,
+                    k == blockSizeZ - 1,
+                };
+                // loop through each of the neighbour blocks
+                for (int x = 0; x < 8; x++) {
+                    // check if this point needs data from this neighbour
+                    if (neighbourConfigs[x].x == true && neighboursNeeded.x == false) continue;
+                    if (neighbourConfigs[x].y == true && neighboursNeeded.y == false) continue;
+                    if (neighbourConfigs[x].z == true && neighboursNeeded.z == false) continue;
+
+                    // load the data needed from this cell
+                    struct Vec3Int src = {
+                        i * (1 - neighbourConfigs[x].x),
+                        j * (1 - neighbourConfigs[x].y),
+                        k * (1 - neighbourConfigs[x].z)
+                    };
+                    struct Vec3Int dst = {
+                        i + neighbourConfigs[x].x, 
+                        j + neighbourConfigs[x].y, 
+                        k + neighbourConfigs[x].z
+                    };
+                    blockData[dst.x][dst.y][dst.z] = getFineDataValue(fineData, slotNums[x], src);
+                }
+            }
+        }
+    }
+}
+
+float blockSum(float blockData[5][5][5]) {
+    float total = 0;
+    for (int i = 0; i < blockSizeX; i++) {
+        for (int j = 0; j < blockSizeY; j++) {
+            for (int k = 0; k < blockSizeZ; k++) {
+                total += blockData[i][j][k];
+            }
+        }
+    }
+    return total;
+}
+
+// adds verts for a particular cell
+void addVertsFine(
+    float* verts,
+    uint* curr, 
+    int code, 
+    struct Vec3Int cellPos,
+    struct Vec3Int blockPos,
+    float blockData[5][5][5],
+    // float* points,
+    struct Vec3Float scale,
+    float threshold, 
+    bool pointsBool
+) {
+    int* edges = edgeTable[code];
+    for (int i = 0; i < 12; i++) {
+        if (edges[i] != -1) {
+            // add vertex position to vertex list
+            int connected[2] = {
+                edgeToVertsTable[edges[i]][0],
+                edgeToVertsTable[edges[i]][1],
+            };
+
+            int a[3] = {
+                vertCoordTable[connected[0]][0],
+                vertCoordTable[connected[0]][1],
+                vertCoordTable[connected[0]][2]
+            };
+            int b[3] = {
+                vertCoordTable[connected[1]][0],
+                vertCoordTable[connected[1]][1],
+                vertCoordTable[connected[1]][2]
+            };
+
+            // int aInd = size.y*size.z*(a[0] + pointPos.x) + size.z*(a[1] + pointPos.y) + a[2] + pointPos.z;
+            // int bInd = size.y*size.z*(b[0] + pointPos.x) + size.z*(b[1] + pointPos.y) + b[2] + pointPos.z;
+            // the values at the endpoints of the edge
+            float va = blockData[cellPos.x + a[0]][cellPos.y + a[1]][cellPos.z + a[2]];
+            float vb = blockData[cellPos.x + b[0]][cellPos.y + b[1]][cellPos.z + b[2]];
+            
+            float fac = (threshold-va)/(vb-va);
+
+            if (pointsBool == true) {
+                // // if the points are defined explicitly
+                // float pa[3] = {
+                //     points[3*aInd + 0],
+                //     points[3*aInd + 1],
+                //     points[3*aInd + 2]
+                // };
+                // float pb[3] = {
+                //     points[3*bInd + 0],
+                //     points[3*bInd + 1],
+                //     points[3*bInd + 2]
+                // };
+                // verts[3*(*curr) + 0] = pa[0]*(1.0-fac) + pb[0]*fac;
+                // verts[3*(*curr) + 1] = pa[1]*(1.0-fac) + pb[1]*fac;
+                // verts[3*(*curr) + 2] = pa[2]*(1.0-fac) + pb[2]*fac;
+            } else {
+                verts[3*(*curr) + 0] = ((float)a[0]*(1-fac) + (float)b[0]*fac + (float)cellPos.x + (float)blockPos.x*blockSizeX)*scale.x;
+                verts[3*(*curr) + 1] = ((float)a[1]*(1-fac) + (float)b[1]*fac + (float)cellPos.y + (float)blockPos.y*blockSizeY)*scale.y;
+                verts[3*(*curr) + 2] = ((float)a[2]*(1-fac) + (float)b[2]*fac + (float)cellPos.z + (float)blockPos.z*blockSizeZ)*scale.z;
+            }
+
+            (*curr)++;
+        } else {
+            break;
+        }
+    }
+}
+
+// extract isosurface from fine data
+int EMSCRIPTEN_KEEPALIVE generateMeshFine(
+    float* fineData,
+    int blocksSizeX, // size of dataset in blocks
+    int blocksSizeY, // size of dataset in blocks
+    int blocksSizeZ, // size of dataset in blocks
+    int dataSizeX,
+    int dataSizeY,
+    int dataSizeZ,
+    uint* activeBlocks,
+    uint activeBlocksCount, 
+    int* blockLocations,
+    float scaleX,    // controls scaling, doesn't affect how many cells a virtual cell is
+    float scaleY,    // controls scaling, doesn't affect how many cells a virtual cell is
+    float scaleZ,    // controls scaling, doesn't affect how many cells a virtual cell is
+    float threshold, 
+    bool pointsBool
+) {
+    struct Vec3Int dataSize = {dataSizeX, dataSizeY, dataSizeZ};
+    struct Vec3Int blocksSize = {blocksSizeX, blocksSizeY, blocksSizeZ};
+    struct Vec3Float scale = {scaleX, scaleY, scaleZ};
+    // go through each block in activeBlocks sequentially
+
+    vertsNum = 0;
+    indicesNum = 0;
+
+    console_log_int(12345);
+
+    console_log_int(activeBlocksCount);
+    // enumeration step
+    for (uint x = 0; x < activeBlocksCount; x++) {
+        // figure out if this point has a valid cell associated with it
+        // i.e. fully within the bounds of the dataset and the requisite neighbour is loaded if on a forward face
+        uint blockID = activeBlocks[x];
+        // console_log_int(blockID);
+
+        int slotNum = blockLocations[blockID];
+        // console_log_int(slotNum);
+        // get the position of the block in the overall block stucture
+        struct Vec3Int blockPos = posFromIndex(blockID, blocksSize);
+
+
+        // figure out which neighbour blocks are present
+        bool neighboursPresent[8];
+        int neighbourSlotNums[8];
+        neighbourSlotNums[0] = slotNum; // set the slot number of this block
+        getNeighboursPresent(neighboursPresent, neighbourSlotNums, blockPos, blockLocations, blocksSize);
+        // grab all needed data
+        float blockData[blockSizeX + 1][blockSizeX + 1][blockSizeX + 1];
+        populateBlockData(fineData, blockData, neighbourSlotNums);
+
+        // if (blockSum(blockData) != 0) {
+        //     // always 10???
+        //     console_log_float(blockSum(blockData));
+        // }
+        console_log_float(blockData[4][4][4]);
+
+        for (int i = 0; i < blockDimensions.x; i++) {
+            for (int j = 0; j < blockDimensions.y; j++) {
+                for (int k = 0; k < blockDimensions.z; k++) {
+                    if (!neededNeighboursPresent((struct Vec3Int){i, j, k}, neighboursPresent)) {
+                        continue;
+                    }
+                    // get the code for this cell
+
+
+                    int code = 0;
+                    for (int l = 0; l < 8; l++) {
+                        // struct Vec3Int thisBlockPos = blockPos;
+                        int* c = vertCoordTable[l];
+                        struct Vec3Int pos = {i + c[0], j + c[1], k + c[2]};
+                        // if (pos.x == blockDimensions.x) {
+                        //     thisBlockPos.x++;
+                        //     pos.x = 0;
+                        // }
+                        // if (pos.y == blockDimensions.y) {
+                        //     thisBlockPos.y++;
+                        //     pos.y = 0;
+                        // }
+                        // if (pos.z == blockDimensions.z) {
+                        //     thisBlockPos.z++;
+                        //     pos.z = 0;
+                        // }
+                        // // check if thisSlotNum is negative and pritn i
+                        // if (thisSlotNum < 0) {
+                        //     console_log_int(thisSlotNum);
+                        // }
+                        
+                        // int thisSlotNum = blockLocations[indexFromPos(thisBlockPos, blocksSize)];
+                        float val = blockData[pos.x][pos.y][pos.z];//getFineDataValue(fineData, thisSlotNum, pos);
+                        code |= (val > threshold) << l;
+                    }
+
+                    if (code != 0 && code != 255) {
+                        console_log_int(code);
+                    }
+
+
+
+                    // and how many indices and vertices it will generate, adding to totals
+                    for (int l = 0; l < 12; l++) {
+                        if (edgeTable[code][l] != -1) {
+                            vertsNum++;
+                        } else {
+                            break;
+                        }
+                    }
+                    for (int j = 0; j < 15; j++) {
+                        if (triTable[codes[i]][j] != -1) {
+                            indicesNum++;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // allocate memory for vert and indices arrays
+    verts = (float*) malloc(vertsNum * 3 * sizeof(float));
+    indices = (uint*) malloc(indicesNum * sizeof(uint));
+
+    console_log_int(vertsNum);
+    console_log_int(indicesNum);
+
+    uint currVert = 0;
+    uint currInd = 0;
+    uint codeIndex = 0;
+
+    // vert generation step
+    for (uint x = 0; x < activeBlocksCount; x++) {
+        // figure out if this point has a valid cell associated with it
+        // i.e. fully within the bounds of the dataset and the requisite neighbour is loaded if on a forward face
+        uint blockID = activeBlocks[x];
+
+        int slotNum = blockLocations[blockID];
+        // get the position of the block in the overall block stucture
+        struct Vec3Int blockPos = posFromIndex(blockID, blocksSize);
+
+
+        // figure out which neighbour blocks are present
+        bool neighboursPresent[8];
+        int neighbourSlotNums[8];
+        neighbourSlotNums[0] = slotNum; // set the slot number of this block
+        getNeighboursPresent(neighboursPresent, neighbourSlotNums, blockPos, blockLocations, blocksSize);
+        // grab all needed data
+        float blockData[blockSizeX + 1][blockSizeX + 1][blockSizeX + 1];
+        populateBlockData(fineData, blockData, neighbourSlotNums);
+
+        for (int i = 0; i < blockDimensions.x; i++) {
+            for (int j = 0; j < blockDimensions.y; j++) {
+                for (int k = 0; k < blockDimensions.z; k++) {
+                    if (!neededNeighboursPresent((struct Vec3Int){i, j, k}, neighboursPresent)){
+                        continue;
+                    }
+                    // get the code for this cell
+                    int code = 0;
+                    for (int l = 0; l < 8; l++) {
+                        struct Vec3Int thisBlockPos = blockPos;
+                        int* c = vertCoordTable[l];
+                        struct Vec3Int pos = {i + c[0], j + c[1], k + c[2]};
+                        if (pos.x == blockDimensions.x) {
+                            thisBlockPos.x++;
+                            pos.x = 0;
+                        }
+                        if (pos.y == blockDimensions.y) {
+                            thisBlockPos.y++;
+                            pos.y = 0;
+                        }
+                        if (pos.z == blockDimensions.z) {
+                            thisBlockPos.z++;
+                            pos.z = 0;
+                        }
+                        uint thisSlotNum = blockLocations[indexFromPos(thisBlockPos, blocksSize)];
+                        float val = getFineDataValue(fineData, thisSlotNum, pos);
+                        code |= (val > threshold) << l;
+                    }
+
+                    // skip if empty
+                    if (code == 0 || code == 255) {
+                        continue;
+                    }
+
+                    // add indices for this cell
+                    addIndices(indices, &currInd, currVert, code);
+
+                    // add vertices for this cell
+                    addVertsFine(verts, &currVert, code, (struct Vec3Int){i, j, k}, blockPos, blockData, scale, threshold, false);
+                }
+            }
+        }
+    }
+
+    return vertsNum;
+}
+
 // free the memory used for this isosurface
 void EMSCRIPTEN_KEEPALIVE freeMem () {
-    free(codes);
     free(verts);
     free(indices);
 }
+
+// setup (static):
+// > data Buffer is created
+// > data is set in buffer
+
+// marching (static):
+// > call generate mesh
+//   > pass in data buffer, length
+//   > pass in data dimensions
+//   > needs to free codes as end
+// > get the length of indicies and verticies
+// > make index buffer (uint32) don't allocate
+// > make
+
+// setup (fine):
+// > fine data buffer is created (float32)
+// > block locations buffer is created (uint32)
+// > locations occupied types array (uint8) (js side)
+
+// update active:
+// > delete activeBlocks buffer if exists
+// > create new active blocks of right length
+// > fill with active block#s
+
+// update fine data:
+// > dataObj, addBlocks, removeBlocks, fineData
+// > try on js side first (probably fast)
+// > do same procedure as others in js
+// > manipulate 
+
+// march (fine):
+// > call the march fine function
+// >
+
+
+
+// codes doesn't need to be read so it can remain just within WASM instance
+// codes take up a lot of space!
+// data can be created as a buffer

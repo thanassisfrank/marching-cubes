@@ -102,7 +102,15 @@ fn main(
         updateInfo.add == TRUE && updateInfo.emptyLocations == TRUE
     ) {
         // add block
-        var newBlockLocIndex = globalIndex - arrayLength(&removeBlocks.buffer);
+        // get the index into addblocks that will be used for this thread
+        var newBlockLocIndex : u32;
+        if (updateInfo.remove == TRUE) {
+            newBlockLocIndex = globalIndex - arrayLength(&removeBlocks.buffer);
+        } else {
+            newBlockLocIndex = globalIndex;
+        }
+        
+        // find an empty slot for this block
         var newBlockLocation = emptyLocations.buffer[newBlockLocIndex];
         // write the new block into this location now
         var i = 0u;

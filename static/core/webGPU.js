@@ -613,16 +613,15 @@ const neighbourCellsTable = [
      1,  2,  3, -1, -1, -1, -1, // x+ edge neighbour
      4, -1, -1, -1, -1, -1, -1, // x+ face neighbour
      1,  4,  5, -1, -1, -1, -1, // y+ edge neighbour
-     2,  4,  6, -1, -1, -1, -1,// z+ edge neighbour
-     1,  2,  3,  4,  5,  6,  7// corner neighbour 
-
+     2,  4,  6, -1, -1, -1, -1, // z+ edge neighbour
+     1,  2,  3,  4,  5,  6,  7  // corner neighbour 
 ]
 
 const tablesLength = vertCoordTable.length + edgeTable.length + edgeToVertsTable.length + triTable.length + neighbourCellsTable.length;
 
 // shader programs ################################################################################################
 function fetchShader(name) {
-    return fetch("shaders/" + name + ".wgsl").then(response => response.text());
+    return fetch("core/shaders/" + name + ".wgsl").then(response => response.text());
 }
 
 var shaderCode = fetchShader("shader");
@@ -1151,7 +1150,7 @@ async function setupMarchFine(dataObj) {
 
     dataObj.marchData.buffers.dataInfoFine = device.createBuffer({
         label: dataObj.id + ": fine data info buffer",
-        size: 32,
+        size: 48,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
         mappedAtCreation: true
     }); 
@@ -1159,6 +1158,7 @@ async function setupMarchFine(dataObj) {
     var range = dataObj.marchData.buffers.dataInfoFine.getMappedRange();
 
     new Uint32Array(range, 16, 3).set(dataObj.blocksSize);
+    new Uint32Array(range, 32, 3).set(dataObj.fullSize);
     
     dataObj.marchData.buffers.dataInfoFine.unmap();
 

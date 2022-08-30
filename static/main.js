@@ -1,15 +1,15 @@
 // main.js
 
-import {get, isVisible, show, hide, removeAllChildren, setupCanvasDims, repositionCanvas, parseXML, IntervalTree, OldIntervalTree, timer} from "./utils.js";
+import {get, isVisible, show, hide, removeAllChildren, setupCanvasDims, repositionCanvas, parseXML, IntervalTree, OldIntervalTree, timer} from "./core/utils.js";
 
-import {dataManager} from "./data.js";
-import {cameraManager} from "./camera.js";
-import { meshManager } from "./mesh.js";
-import { marcherManager } from "./marcher.js";
+import {dataManager} from "./core/data.js";
+import {cameraManager} from "./core/camera.js";
+import { meshManager } from "./core/mesh.js";
+import { marcherManager } from "./core/marcher.js";
 import { viewManager, renderModes } from "./view.js";
 
-import {setRenderModule, setupRenderer, resizeRenderingContext, autoSetRenderModule} from "./render.js";
-import {setupMarchModule, setMarchModule, setupMarch, autoSetMarchModule} from "./march.js";
+import {setRenderModule, setupRenderer, resizeRenderingContext, autoSetRenderModule} from "./core/render.js";
+import {setupMarchModule, setMarchModule, setupMarch, autoSetMarchModule} from "./core/march.js";
 
 autoSetMarchModule();
 autoSetRenderModule();
@@ -82,7 +82,7 @@ async function main() {
     var canvas = get("c");
     setupCanvasDims(canvas);
 
-    const datasets = await fetch("/datasets.json")
+    const datasets = await fetch("/core/datasets.json")
         .then((res) => res.json())
         .then(d => {return {...d, ...functionalDatasets}});
     // setup data manager with these
