@@ -94,11 +94,6 @@ fn unpack(val: u32, i : u32, packing : u32) -> f32{
 
 // different from other getVal as x, y, z are local to block and uses
 // the number of the current wg(block) too
-// fn getVal(x : u32, y : u32, z : u32, WGId : u32, packing : u32) -> f32 {
-//     var i = WGId * {{WGVol}}u + getIndex(x, y, z, WGSize);
-//     return unpack(dataInfo.data[i/packing], i%packing, packing);
-// }
-
 fn getVal(x : u32, y : u32, z : u32, blockIndex : u32, packing : u32) -> f32 {
     // linear index of texel
     var i = blockIndex * {{WGVol}}u + getIndex(x, y, z, WGSize);
@@ -136,8 +131,35 @@ fn getIndexCount(code : u32) -> u32 {
     return i;
 }
 
-// fn all(bools : vec3<bool>) -> bool {
-//     return bools.x && bools.y && bools.z;
+// fn setVertValue(x : f32, y : f32, z : f32, index : u32) {
+//     var coords : vec3<i32>;
+//     coords = vec3<i32>(posFromIndex(index*3, vec3<u32>(textureDimensions(vertTexture).zyx)).zyx);
+//     textureStore(
+//         vertTexture,
+//         coords,
+//         vec4<f32>(x, 0, 0, 0)
+//     );
+//     coords = vec3<i32>(posFromIndex(index*3 + 1, vec3<u32>(textureDimensions(vertTexture).zyx)).zyx);
+//     textureStore(
+//         vertTexture,
+//         coords,
+//         vec4<f32>(y, 0, 0, 0)
+//     );
+//     coords = vec3<i32>(posFromIndex(index*3 + 2, vec3<u32>(textureDimensions(vertTexture).zyx)).zyx);
+//     textureStore(
+//         vertTexture,
+//         coords,
+//         vec4<f32>(z, 0, 0, 0)
+//     );
+// }
+
+// fn setindexValue(val : u32, index) {
+//     var coords = vec3<i32>(posFromIndex(index, vec3<u32>(textureDimensions(indexTexture).zyx)).zyx);
+//     textureStore(
+//         indexTexture,
+//         coords,
+//         vec4<f32>(val, 0, 0, 0)
+//     );
 // }
 
 fn cellPresent(neighbours : vec3<u32>) -> bool {

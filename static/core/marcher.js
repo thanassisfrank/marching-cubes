@@ -109,7 +109,7 @@ var marcherManager = {
                 const maxBytesPerBlock = Math.max(data.bytesPerBlockData(), data.bytesPerBlockPoints())
                 this.blocksBudget = Math.min(Math.floor(marcherManager.storageBudget/maxBytesPerBlock), volume(data.blocksSize)*1.1);
                 // this.marchData.blocksBudget = Math.min(Math.floor(maxBufferSize/maxBytesPerBlock), volume(data.blocksSize))/2;
-                this.marchData.blocksBudget = Math.min(2097152, volume(data.blocksSize));
+                this.marchData.blocksBudget = Math.min(1048576, volume(data.blocksSize))/2;
                 console.log("march module budget:", this.marchData.blocksBudget);
 
                 const maxFinePoints = marcherManager.storageBudget/this.dataType.BYTES_PER_ELEMENT

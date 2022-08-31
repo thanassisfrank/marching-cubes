@@ -2,7 +2,7 @@
 #include <stdlib.h>
 
 // build command:
-// emcc -O2 -s STANDALONE_WASM=1 -s ERROR_ON_UNDEFINED_SYMBOLS=0 -s MALLOC=”dlmalloc” -s INITIAL_MEMORY=67108864 --no-entry -o march.wasm march.c
+// emcc -O2 -s STANDALONE_WASM=1 -s ERROR_ON_UNDEFINED_SYMBOLS=0 -s MALLOC=”dlmalloc” -s INITIAL_MEMORY=134217728 --no-entry -o march.wasm march.c
 
 
 #define blockSizeX 4
@@ -1114,6 +1114,15 @@ int EMSCRIPTEN_KEEPALIVE generateMeshFine(
         bool neighboursPresent[8];
         int neighbourSlotNums[8];
         neighbourSlotNums[0] = slotNum; // set the slot number of this block
+        // if (x == 10) {
+        //     console_log_int(neighbourSlotNums[0]);
+        //     console_log_int(neighbourSlotNums[1]);
+        //     console_log_int(neighbourSlotNums[2]);
+        //     console_log_int(neighbourSlotNums[3]);
+        //     console_log_int(neighbourSlotNums[4]);
+        //     console_log_int(neighbourSlotNums[5]);
+        //     console_log_int(neighbourSlotNums[7]);
+        // }
         getNeighboursPresent(neighboursPresent, neighbourSlotNums, blockPos, blockLocations, blocksSize);
         // grab all needed data
         float blockData[blockSizeX + 1][blockSizeX + 1][blockSizeX + 1];
@@ -1123,7 +1132,7 @@ int EMSCRIPTEN_KEEPALIVE generateMeshFine(
         //     // always 10???
         //     console_log_float(blockSum(blockData));
         // }
-        console_log_float(blockData[4][4][4]);
+        // console_log_float(blockData[4][4][4]);
 
         for (int i = 0; i < blockDimensions.x; i++) {
             for (int j = 0; j < blockDimensions.y; j++) {
@@ -1139,31 +1148,15 @@ int EMSCRIPTEN_KEEPALIVE generateMeshFine(
                         // struct Vec3Int thisBlockPos = blockPos;
                         int* c = vertCoordTable[l];
                         struct Vec3Int pos = {i + c[0], j + c[1], k + c[2]};
-                        // if (pos.x == blockDimensions.x) {
-                        //     thisBlockPos.x++;
-                        //     pos.x = 0;
-                        // }
-                        // if (pos.y == blockDimensions.y) {
-                        //     thisBlockPos.y++;
-                        //     pos.y = 0;
-                        // }
-                        // if (pos.z == blockDimensions.z) {
-                        //     thisBlockPos.z++;
-                        //     pos.z = 0;
-                        // }
-                        // // check if thisSlotNum is negative and pritn i
-                        // if (thisSlotNum < 0) {
-                        //     console_log_int(thisSlotNum);
-                        // }
                         
                         // int thisSlotNum = blockLocations[indexFromPos(thisBlockPos, blocksSize)];
                         float val = blockData[pos.x][pos.y][pos.z];//getFineDataValue(fineData, thisSlotNum, pos);
                         code |= (val > threshold) << l;
                     }
 
-                    if (code != 0 && code != 255) {
-                        console_log_int(code);
-                    }
+                    // if (code != 0 && code != 255) {
+                    //     console_log_int(code);
+                    // }
 
 
 
@@ -1175,8 +1168,9 @@ int EMSCRIPTEN_KEEPALIVE generateMeshFine(
                             break;
                         }
                     }
-                    for (int j = 0; j < 15; j++) {
-                        if (triTable[codes[i]][j] != -1) {
+
+                    for (int l = 0; l < 15; l++) {
+                        if (triTable[code][l] != -1) {
                             indicesNum++;
                         } else {
                             break;
@@ -1227,23 +1221,30 @@ int EMSCRIPTEN_KEEPALIVE generateMeshFine(
                     // get the code for this cell
                     int code = 0;
                     for (int l = 0; l < 8; l++) {
-                        struct Vec3Int thisBlockPos = blockPos;
+                        // struct Vec3Int thisBlockPos = blockPos;
+                        // int* c = vertCoordTable[l];
+                        // struct Vec3Int pos = {i + c[0], j + c[1], k + c[2]};
+                        // if (pos.x == blockDimensions.x) {
+                        //     thisBlockPos.x++;
+                        //     pos.x = 0;
+                        // }
+                        // if (pos.y == blockDimensions.y) {
+                        //     thisBlockPos.y++;
+                        //     pos.y = 0;
+                        // }
+                        // if (pos.z == blockDimensions.z) {
+                        //     thisBlockPos.z++;
+                        //     pos.z = 0;
+                        // }
+                        // uint thisSlotNum = blockLocations[indexFromPos(thisBlockPos, blocksSize)];
+                        // float val = getFineDataValue(fineData, thisSlotNum, pos);
+                        // code |= (val > threshold) << l;
+                        // struct Vec3Int thisBlockPos = blockPos;
                         int* c = vertCoordTable[l];
                         struct Vec3Int pos = {i + c[0], j + c[1], k + c[2]};
-                        if (pos.x == blockDimensions.x) {
-                            thisBlockPos.x++;
-                            pos.x = 0;
-                        }
-                        if (pos.y == blockDimensions.y) {
-                            thisBlockPos.y++;
-                            pos.y = 0;
-                        }
-                        if (pos.z == blockDimensions.z) {
-                            thisBlockPos.z++;
-                            pos.z = 0;
-                        }
-                        uint thisSlotNum = blockLocations[indexFromPos(thisBlockPos, blocksSize)];
-                        float val = getFineDataValue(fineData, thisSlotNum, pos);
+                        
+                        // int thisSlotNum = blockLocations[indexFromPos(thisBlockPos, blocksSize)];
+                        float val = blockData[pos.x][pos.y][pos.z];//getFineDataValue(fineData, thisSlotNum, pos);
                         code |= (val > threshold) << l;
                     }
 

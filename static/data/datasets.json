@@ -21,6 +21,7 @@
         "name": "magnetic",
         "path": "data/magnetic_reconnection_512x512x512_float32.raw",
         "type": "raw",
+        "complexAvailable": true,
         "size": {
             "x": 512,
             "y": 512,
@@ -31,7 +32,7 @@
             "y": 1,
             "z": 1
         },
-        "limits": [0, 1000000],
+        "limits": [0.018786557, 24.195253],
         "dataType": "float32"
     },
     "silicium": {
@@ -140,5 +141,23 @@
             "z": 302
         },
         "dataType": "uint8"
+    },
+    "pancreas": {
+        "name": "Pancreas",
+        "path": "data/pancreas_240x512x512_int16.raw",
+        "type": "raw",
+        "complexAvailable": true,
+        "limits": [-1024, 2421],
+        "size": {
+            "x": 240,
+            "y": 512,
+            "z": 512
+        },
+        "cellSize": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+        },
+        "dataType": "int16"
     }
 }

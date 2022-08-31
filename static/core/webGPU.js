@@ -982,6 +982,8 @@ function getWGCount(dataObj) {
         y: Math.ceil((dataObj.size[1]-1)/(WGSize.y * cellScale)),
         z: Math.ceil((dataObj.size[2]-1)/(WGSize.z * cellScale))
     }
+    console.log("fusifnjdoigjos");
+    console.log(WGCount, dataObj.size);
     WGCount.val = WGCount.x*WGCount.y*WGCount.z;
 
     dataObj.marchData.WGCount = WGCount;
@@ -996,14 +998,14 @@ async function setupMarch(dataObj) {
     dataObj.marchData.cellScale = 1;
       
     dataObj.marchData.packing = 1;
-    if (dataObj.data.constructor == Float32Array) {
-        dataObj.marchData.packing = 1;
-    } else if (dataObj.data.constructor == Uint8Array) {
-        dataObj.marchData.packing = 4;
-    } else {
-        console.log("only float32 and uint8 data values supported so far");
-        return;
-    }
+    // if (dataObj.data.constructor == Float32Array) {
+    //     dataObj.marchData.packing = 1;
+    // } else if (dataObj.data.constructor == Uint8Array) {
+    //     dataObj.marchData.packing = 4;
+    // } else {
+    //     console.log("only float32 and uint8 data values supported so far");
+    //     return;
+    // }
 
     getWGCount(dataObj);
 
@@ -1043,14 +1045,14 @@ async function setupMarchFine(dataObj) {
     dataObj.marchData.cellScale = 1;
       
     dataObj.marchData.packing = 1;
-    if (dataObj.dataType == Float32Array) {
-        dataObj.marchData.packing = 1;
-    } else if (dataObj.dataType == Uint8Array) {
-        dataObj.marchData.packing = 4;
-    } else {
-        console.log("only float32 and uint8 data values supported so far");
-        return;
-    }
+    // if (dataObj.dataType == Float32Array) {
+    //     dataObj.marchData.packing = 1;
+    // } else if (dataObj.dataType == Uint8Array) {
+    //     dataObj.marchData.packing = 4;
+    // } else {
+    //     console.log("only float32 and uint8 data values supported so far");
+    //     return;
+    // }
 
     // get the size of the fine data buffer in #blocks
     dataObj.marchData.fineBlocksCount = Math.min(dataObj.blocksVol, MaxFineBlocksCount);
@@ -1101,17 +1103,23 @@ async function setupMarchFine(dataObj) {
     dataObj.marchData.buffers.indexOffsetTotals = indexOffsetTotalsBuffer;
     dataObj.marchData.buffers.bufferOffset = bufferOffsetBuffer;
 
-    dataObj.marchData.bindGroups.bufferOffset = device.createBindGroup({
-        layout: marchData.bindGroupLayouts.prefix[1],
-        entries: [
-            {
-                binding: 0,
-                resource: {
-                    buffer: dataObj.marchData.buffers.bufferOffset
-                }
-            }
-        ]
-    });
+    dataObj.marchData.bindGroups.bufferOffset = generateBG(
+        marchData.bindGroupLayouts.prefix[1],
+        [dataObj.marchData.buffers.bufferOffset],
+        "buffer offset fine"
+
+    );
+    // dataObj.marchData.bindGroups.bufferOffset = device.createBindGroup({
+    //     layout: marchData.bindGroupLayouts.prefix[1],
+    //     entries: [
+    //         {
+    //             binding: 0,
+    //             resource: {
+    //                 buffer: dataObj.marchData.buffers.bufferOffset
+    //             }
+    //         }
+    //     ]
+    // });
 
     // create the fine data texture
     const textureSize = {};
@@ -1199,6 +1207,7 @@ function createBindGroups(dataObj) {
             height: dataObj.size[1],
             depthOrArrayLayers: dataObj.size[0]
         }
+        console.log(textureSize, dataObj.data.length);
         
         // transfer data over
         // create the buffer to copy from
@@ -1220,8 +1229,8 @@ function createBindGroups(dataObj) {
                 format: "rgba32float",
                 usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
             })
-            console.log(dataObj.marchData.textures.data)
-
+            // console.log(dataObj.marchData.textures.data)
+            // console.log()
             device.queue.writeTexture(
                 {
                     texture: dataObj.marchData.textures.data
@@ -1794,8 +1803,8 @@ async function updateActiveBlocks(dataObj) {
             [
                 vertexOffsetBuffer,
                 dataObj.marchData.buffers.vertexOffsetTotals
-
-            ]
+            ],
+            "prefix 0 fine, vert"
 
         );
         
@@ -1804,7 +1813,8 @@ async function updateActiveBlocks(dataObj) {
             [
                 indexOffsetBuffer,
                 dataObj.marchData.buffers.indexOffsetTotals
-            ]
+            ],
+            "prefix 0 fine, ind"
         )
     
         // combined offset buffers into one bg
@@ -1813,7 +1823,8 @@ async function updateActiveBlocks(dataObj) {
             [
                 vertexOffsetBuffer,
                 indexOffsetBuffer
-            ]
+            ],
+            "enumerate fine 2"
         )
     }
 }
@@ -1980,7 +1991,8 @@ async function updateMarchFineData(dataObj, addBlocks, removeBlocks, fineData) {
             dataObj.marchData.buffers.addBlocks,
             dataObj.marchData.buffers.removeBlocks,
             dataObj.marchData.buffers.updateInfo
-        ]
+        ],
+        "update fine data 0"
     ))
     passEncoder.setBindGroup(1, generateBG(
         marchData.pipelines.updateFineData.getBindGroupLayout(1),
@@ -1988,7 +2000,8 @@ async function updateMarchFineData(dataObj, addBlocks, removeBlocks, fineData) {
             dataObj.marchData.buffers.blockLocations,
             dataObj.marchData.buffers.emptyLocations,
             dataObj.marchData.buffers.locationsOccupied
-        ]
+        ],
+        "update fine data 1"
     ))
 
     passEncoder.dispatchWorkgroups(Math.ceil(Math.max(addBlocks.length, removeBlocks.length)/MaxWGSize));
@@ -2155,6 +2168,7 @@ async function marchFine(dataObj, meshObj, threshold) {
     // march pass =====================================================================================
     meshObj.indicesNum = indNum;
     meshObj.vertsNum = vertNum;
+    console.log(vertNum, indNum);
 
     if (vertNum == 0 || indNum == 0) {
         meshObj.verts = new Float32Array();

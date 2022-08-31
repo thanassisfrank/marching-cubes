@@ -142,6 +142,7 @@ async function setupMarchFine(dataObj) {
     dataObj.marchData.buffers.blockLocations = new Buffer(dataObj.marchData, Int32Array, dataObj.blocksVol);
     dataObj.marchData.buffers.blockLocations.allocate();
     dataObj.marchData.buffers.blockLocations.fill(-1);
+    console.log(dataObj.marchData.buffers.blockLocations.read());
     // make locations occupied
     dataObj.marchData.arrays.locationsOccupied = new Uint8Array(fineDataBlockCount); // not in WASM instance
 
@@ -188,6 +189,7 @@ function updateActiveBlocks(dataObj) {
 
     dataObj.marchData.buffers.activeBlocks = activeBuff;
     console.log("updated active");
+    // console.log(dataObj.marchData.buffers.activeBlocks.read());
 }
 
 function updateMarchFineData(dataObj, addBlockIDs, removeBlockIDs, newBlockData) {
@@ -232,6 +234,7 @@ function updateMarchFineData(dataObj, addBlockIDs, removeBlockIDs, newBlockData)
     var checkIndex = 0;
     var foundEmpty = false;
     for (let i = added; i < addBlockIDs.length; i++) {
+        foundEmpty = false;
         // search for next empty slot in fine data buffer
         while (checkIndex < dataObj.marchData.fineDataBlockCount && !foundEmpty) {
             if (locationsOccupied[checkIndex] == 0) {
@@ -260,6 +263,8 @@ function updateMarchFineData(dataObj, addBlockIDs, removeBlockIDs, newBlockData)
     console.log(added, "blocks added");
     console.log(removed, "blocks removed");
     // console.log(this.emptyLocations.length, "empty locations at end");
+
+    // console.log(dataObj.marchData.buffers.blockLocations.read());
 }
 
 function generateMeshFineWASM (dataObj, meshObj, threshold) {

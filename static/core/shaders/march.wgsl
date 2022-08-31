@@ -75,14 +75,45 @@ fn getPointPos(x : u32, y : u32, z : u32, cellScale : u32) -> vec3<f32> {
     ).yzw;
 }
 
-fn samplePointPos(x: f32, y: f32, z: f32, cellScale : u32) -> vec3<f32> {
-    var uvw = vec3<f32>(z, y, x)*f32(cellScale)/(vec3<f32>(textureDimensions(data, 0).zyx) - vec3<f32>(1));
-    return textureSample(
-        data,
-        dataSampler,
-        uvw
-    ).yzw;
-}
+// fn samplePointPos(x: f32, y: f32, z: f32, cellScale : u32) -> vec3<f32> {
+//     var uvw = vec3<f32>(z, y, x)*f32(cellScale)/(vec3<f32>(textureDimensions(data, 0).zyx) - vec3<f32>(1));
+//     return textureSample(
+//         data,
+//         dataSampler,
+//         uvw
+//     ).yzw;
+// }
+
+// fn setVertValue(x : f32, y : f32, z : f32, index : u32) {
+//     var coords : vec3<i32>;
+//     coords = vec3<i32>(posFromIndex(index*3, vec3<u32>(textureDimensions(vertTexture).zyx)).zyx);
+//     textureStore(
+//         vertTexture,
+//         coords,
+//         vec4<f32>(x, 0, 0, 0)
+//     );
+//     coords = vec3<i32>(posFromIndex(index*3 + 1, vec3<u32>(textureDimensions(vertTexture).zyx)).zyx);
+//     textureStore(
+//         vertTexture,
+//         coords,
+//         vec4<f32>(y, 0, 0, 0)
+//     );
+//     coords = vec3<i32>(posFromIndex(index*3 + 2, vec3<u32>(textureDimensions(vertTexture).zyx)).zyx);
+//     textureStore(
+//         vertTexture,
+//         coords,
+//         vec4<f32>(z, 0, 0, 0)
+//     );
+// }
+
+// fn setindexValue(val : u32, index) {
+//     var coords = vec3<i32>(posFromIndex(index, vec3<u32>(textureDimensions(indexTexture).zyx)).zyx);
+//     textureStore(
+//         indexTexture,
+//         coords,
+//         vec4<f32>(val, 0, 0, 0)
+//     );
+// }
 
 
 @compute @workgroup_size({{WGSizeX}}, {{WGSizeY}}, {{WGSizeZ}})

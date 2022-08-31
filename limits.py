@@ -4,14 +4,17 @@
 import numpy as np
 import json
 import sys
+import time
 
 # path = "data\silicium_98x34x34_uint8"
 # ext = ".raw"
 
 data_types = {
     "uint8": np.uint8,
-    "float32": np.float32
+    "float32": np.float32,
+    "int16": np.int16
 }
+
 
 blockSize = {
     "x": 4,
@@ -26,7 +29,7 @@ def getIndex(x, y, z, size):
 
 def main(data_name):
     # load data info from dataset name
-    datasets = json.loads(open("datasets.json", "r").read())
+    datasets = json.loads(open("static/data/datasets.json", "r").read())
     try:
         data_info = datasets[data_name]
         size = data_info["size"]
@@ -45,11 +48,19 @@ def main(data_name):
     }
 
     # load data in buffer
-    data = np.frombuffer(open("data/" + path + "." + ext, "rb").read(), dtype=data_type)
+    try:
+        file_path = "static/" + path + "." + ext
+        print("file path: " + file_path)
+        data = np.frombuffer(open(file_path, "rb").read(), dtype=data_type)
+    except OSError:
+        print("could not find file")
+        return
 
     # create output buffer
     output = np.empty([blocks["x"] * blocks["y"] * blocks["z"], 2], dtype=data_type)
 
+    print("starting limits generation")
+    start_time = time.time()
     # loop through each block and get its limits
     for i_b in range(blocks["x"]):
         for j_b in range(blocks["y"]):
@@ -82,9 +93,27 @@ def main(data_name):
                 if not limits[1]:
                     limits[1] = limits[0]
                 output[index_b] = limits
+        print("\r" + "%.1f" % (i_b/(blocks["x"]-1)*100) + "% complete", end="")
+
+    print()
+    print("complete")
+    print("took " + "%.1f" % (time.time()-start_time) + "s")
+
+    # get overall limits for file
+    overall_limits = [None, None]
+    for i in range(blocks["x"] * blocks["y"] * blocks["z"]):
+        low = output[i][0]
+        high = output[i][1]
+        if overall_limits[0] is None or low < overall_limits[0]:
+            overall_limits[0] = low
+        if overall_limits[1] is None or high > overall_limits[1]:
+            overall_limits[1] = high
+
+    print("low limit:", overall_limits[0])
+    print("high limit:", overall_limits[1])
 
     # save to binary file
-    with open("data/" + path + "_limits" + "." + ext, "wb") as file:
+    with open("static/" + path + "_limits" + "." + ext, "wb") as file:
         file.write(output.data)
 
     print("limits file generation successful")

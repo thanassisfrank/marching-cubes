@@ -56,6 +56,7 @@ var dataManager = {
     setConfigSet: function(configSet) {
         this.configSet = configSet;
         for (let id in configSet) {
+            this.configSet[id].id = id;
             this.directory[id] = null;
         }
         console.log(this.directory);
@@ -427,10 +428,10 @@ var dataManager = {
             // assess what resolution the coarse representation should be
             // request the data at that resolution
             // for now, request the data at a fixed scale
-            const scale = 2;
+            const scale = 4;
             
             const request = {
-                name: config.name,
+                name: config.id,
                 mode: "whole",
                 // will be determined by benchmarking
                 cellScale: scale
@@ -492,8 +493,9 @@ var dataManager = {
 
         // called to request and load fine data around the iosurface from the server
         this.getFineData = async function(threshold) {
+            console.log(this.config);
             const request = {
-                name: this.config.name,
+                name: this.config.id,
                 mode: "threshold",
                 threshold: threshold
             }
@@ -632,7 +634,7 @@ var dataManager = {
         // fetches the supplied blocks
         this.fetchBlocks = function(blocks) {
             const request = {
-                name: this.config.name,
+                name: this.config.id,
                 mode: "blocks",
                 blocks: blocks
             }

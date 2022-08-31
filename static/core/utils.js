@@ -108,7 +108,8 @@ export const DATA_TYPES = {
     "uint32": Uint32Array,
     "int64": BigInt64Array,
     "uint64": BigUint64Array,
-    "float32": Float32Array
+    "float32": Float32Array,
+    "int16": Int16Array
 }
 
 export var clampBox = (box, clampBox) => {

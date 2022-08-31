@@ -4,13 +4,15 @@
 import numpy as np
 import json
 import sys
+import time
 
 # path = "data\silicium_98x34x34_uint8"
 # ext = ".raw"
 
 data_types = {
     "uint8": np.uint8,
-    "float32": np.float32
+    "float32": np.float32,
+    "int16": np.int16
 }
 
 blockSize = {
@@ -26,7 +28,7 @@ def getIndex(x, y, z, size):
 
 def main(data_name):
     # load data info from dataset name
-    datasets = json.loads(open("datasets.json", "r").read())
+    datasets = json.loads(open("static/data/datasets.json", "r").read())
     try:
         data_info = datasets[data_name]
         size = data_info["size"]
@@ -45,7 +47,13 @@ def main(data_name):
     }
 
     # load data in buffer
-    data = np.frombuffer(open("data/" + path + "." + ext, "rb").read(), dtype=data_type)
+    try:
+        file_path = "static/" + path + "." + ext
+        print("file path: " + file_path)
+        data = np.frombuffer(open(file_path, "rb").read(), dtype=data_type)
+    except OSError:
+        print("could not find file")
+        return
 
     block_vol = blockSize["x"] * blockSize["y"] * blockSize["z"]
 
@@ -55,6 +63,8 @@ def main(data_name):
         dtype=data_type
     )
 
+    print("starting translation process")
+    start_time = time.time()
     # keeps a track of the index in the output
     out_ind = 0
     # loop through each block and get its limits
@@ -71,12 +81,15 @@ def main(data_name):
                             index = getIndex(i, j, k, size)
                             output[out_ind] = data[index]
                             out_ind += 1
+        print("\r" + "%.1f" % (i_b/(blocks["x"]-1)*100) + "% complete", end="")
 
+    print("100% done, writing to file")
+    print("took " + "%.1f" % (time.time()-start_time) + "s")
     # save to binary file
-    with open("data/" + path + "_blocks" + "." + ext, "wb") as file:
+    with open("static/" + path + "_blocks" + "." + ext, "wb") as file:
         file.write(output.data)
 
-    print("blocks file generation successful")
+    print("blocks file generation complete")
 
 
 if __name__ == "__main__":

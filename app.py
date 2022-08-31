@@ -13,10 +13,17 @@ static_path = "static/"
 port = 8080
 # files = json.loads(open("files.json", "r").read())
 file_types = json.loads(open("fileTypes.json", "r").read())
-datasets = json.loads(open(static_path + "core/datasets.json", "r").read())
+datasets = json.loads(open(static_path + "data/datasets.json", "r").read())
 struct_data_formats = {
     "float32": "f",
-    "uint8": "c"
+    "uint8": "c",
+    "int16": "a"
+}
+
+np_data_formats = {
+    "uint8": np.uint8,
+    "float32": np.float32,
+    "int16": np.int16
 }
 
 
@@ -45,7 +52,7 @@ class requestHandler(BaseHTTPRequestHandler):
     # method to handle requests for static files
     # the paths in the url directly translate to files under the static_path attribute
     def do_GET(self):
-        file_name = self.path[1:]
+        # file_name = self.path[1:]
         try:
             # file_desc = get_file_desc(files, file_name)
             # get the extension from the file
@@ -70,7 +77,7 @@ class requestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(file.read())
                 file.close()
 
-        except OSError:
+        except:
             self.send_response(404)
             self.end_headers()
 
@@ -139,12 +146,16 @@ class requestHandler(BaseHTTPRequestHandler):
             vol_red = int(size_red["x"]*size_red["y"]*size_red["z"])
 
             # load bytes into am array of the correct type
-            if data_info["dataType"] == "float32":
-                data = np.frombuffer(file.read(), dtype=np.float32)
-                output = np.empty(vol_red, dtype=np.float32)
-            elif data_info["dataType"] == "uint8":
-                data = np.frombuffer(file.read(), dtype=np.uint8)
-                output = np.empty(vol_red, dtype=np.uint8)
+            data_type = np_data_formats[data_info["dataType"]]
+            data = np.frombuffer(file.read(), dtype=data_type)
+            output = np.empty(vol_red, dtype=data_type)
+
+            # if data_info["dataType"] == "float32":
+            #     data = np.frombuffer(file.read(), dtype=np.float32)
+            #     output = np.empty(vol_red, dtype=np.float32)
+            # elif data_info["dataType"] == "uint8":
+            #     data = np.frombuffer(file.read(), dtype=np.uint8)
+            #     output = np.empty(vol_red, dtype=np.uint8)
             
             file.close()
 
@@ -172,10 +183,11 @@ class requestHandler(BaseHTTPRequestHandler):
         data_type = ""
 
         # load bytes into am array of the correct type
-        if data_info["dataType"] == "float32":
-            data_type = np.float32
-        elif data_info["dataType"] == "uint8":
-            data_type = np.uint8
+        data_type = np_data_formats[data_info["dataType"]]
+        # if data_info["dataType"] == "float32":
+        #     data_type = np.float32
+        # elif data_info["dataType"] == "uint8":
+        #     data_type = np.uint8
 
         data = np.frombuffer(data_file.read(), dtype=data_type)
         limits = np.frombuffer(limits_file.read(), dtype=data_type)
@@ -243,10 +255,12 @@ class requestHandler(BaseHTTPRequestHandler):
         data_type = None
 
         # load bytes into am array of the correct type
-        if data_info["dataType"] == "float32":
-            data_type = np.float32
-        elif data_info["dataType"] == "uint8":
-            data_type = np.uint8
+        data_type = np_data_formats[data_info["dataType"]]
+        # if data_info["dataType"] == "float32":
+        #     data_type = np.float32
+        # elif data_info["dataType"] == "uint8":
+        #     data_type = np.uint8
+        
 
         data = np.frombuffer(data_file.read(), dtype=data_type)
 
@@ -265,18 +279,6 @@ class requestHandler(BaseHTTPRequestHandler):
 
         # active_ids = []
         fine_data = np.empty(len(request["blocks"])*blockSize["x"]*blockSize["y"]*blockSize["z"], dtype=data_type)
-        # num = 0
-        # for id in request["blocks"]:
-        #     block_pos = get_pos(id, blocks)
-        #     for i_l in range(blockSize["x"]):
-        #         for j_l in range(blockSize["y"]):
-        #             for k_l in range(blockSize["z"]):
-        #                 i = i_l + block_pos[0] * blockSize["x"]
-        #                 j = j_l + block_pos[1] * blockSize["y"]
-        #                 k = k_l + block_pos[2] * blockSize["z"]
-        #                 index = get_index(i, j, k, data_info["size"])
-        #                 fine_data[num] = data[index]
-        #                 num += 1
 
         for i in range(len(request["blocks"])):
             id = request["blocks"][i]

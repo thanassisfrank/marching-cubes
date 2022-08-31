@@ -82,7 +82,7 @@ async function main() {
     var canvas = get("c");
     setupCanvasDims(canvas);
 
-    const datasets = await fetch("/core/datasets.json")
+    const datasets = await fetch("/data/datasets.json")
         .then((res) => res.json())
         .then(d => {return {...d, ...functionalDatasets}});
     // setup data manager with these
