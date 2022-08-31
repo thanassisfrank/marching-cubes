@@ -126,11 +126,13 @@ class requestHandler(BaseHTTPRequestHandler):
         data_info = datasets[request["name"]]
         # load the dataset TODO: load chunks at a time
         file = open(static_path + data_info["path"], "rb")
-        if request["cellScale"] == 1:
-            # if the cell scale is 1, the whole data is needed
-            self.wfile.write(file.read())
-            file.close()
-        else:
+        # if request["cellScale"] == 1:
+        #     self.send_response(200)
+        #     self.send_header("content-type", "applcation/octet-stream")
+        #     # if the cell scale is 1, the whole data is needed
+        #     self.wfile.write(file.read())
+        #     file.close()
+        if True:
             # else need to send only requested bytes
 
             # create alias vars to shorten code

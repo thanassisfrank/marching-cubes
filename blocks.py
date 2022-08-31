@@ -5,6 +5,9 @@ import numpy as np
 import json
 import sys
 import time
+from vtkmodules.vtkIOXML import vtkXMLStructuredPointsReader
+# from vtk import vtkStructuredPointsReader
+# from vtk.util import numpy_support as VN
 
 # path = "data\silicium_98x34x34_uint8"
 # ext = ".raw"

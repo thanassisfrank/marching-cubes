@@ -426,9 +426,12 @@ var dataManager = {
             this.limits = config.limits;
             console.log(this.limits)
             // assess what resolution the coarse representation should be
-            // request the data at that resolution
-            // for now, request the data at a fixed scale
-            const scale = 4;
+            const totalPoints = this.config.size.x*this.config.size.y*this.config.size.z;
+            // console.log(totalPoints);
+            const pointsTarget = 200000;
+            const scale = Math.ceil(Math.pow(totalPoints/pointsTarget, 1/3));
+            console.log("scale:", scale);
+            // const scale = 1;
             
             const request = {
                 name: config.id,
@@ -436,6 +439,8 @@ var dataManager = {
                 // will be determined by benchmarking
                 cellScale: scale
             }
+
+            // console.log(request);
 
             // wait for the response
             const response = await fetch("/data", {

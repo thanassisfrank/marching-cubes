@@ -953,14 +953,14 @@ function createBindGroupLayouts() {
     marchData.bindGroupLayouts.march = [
         generateBGLayout("cbr ctn3df csn cbr", "march0"), // generateBGLayout("cbr cbr"),
         generateBGLayout("cbs", "march1"),
-        generateBGLayout("cbs cbs cbs", "march2"),
+        generateBGLayout("cw3dr32float cw3dr32float cw3dr32uint", "march2"),
         generateBGLayout("cbs cbs", "march3")
     ];
 
     marchData.bindGroupLayouts.marchFine = [
         generateBGLayout("cbr"),
         generateBGLayout("cbr ctn3df cbr cbr"),
-        generateBGLayout("cbs cbs"),
+        generateBGLayout("cw3dr32float cw3dr32float cw3dr32uint", "march2"),
         generateBGLayout("cbs cbs")
     ];
 
@@ -1144,8 +1144,14 @@ async function setupMarchFine(dataObj) {
     dataObj.marchData.buffers.blockLocations = device.createBuffer({
         label: dataObj.id + ": block locations",
         size: dataObj.marchData.fineBlocksCount * 4,
-        usage: GPUBufferUsage.STORAGE
+        usage: GPUBufferUsage.STORAGE,
+        mappedAtCreation: true
     });
+
+    var range = dataObj.marchData.buffers.blockLocations.getMappedRange();
+    new Int32Array(range, 0, dataObj.marchData.fineBlocksCount).fill(-1);
+    dataObj.marchData.buffers.blockLocations.unmap();
+
     // create locations occupied buffer
     // Assume all initially at 0
     dataObj.marchData.buffers.locationsOccupied = device.createBuffer({
@@ -1163,7 +1169,7 @@ async function setupMarchFine(dataObj) {
         mappedAtCreation: true
     }); 
 
-    var range = dataObj.marchData.buffers.dataInfoFine.getMappedRange();
+    range = dataObj.marchData.buffers.dataInfoFine.getMappedRange();
 
     new Uint32Array(range, 16, 3).set(dataObj.blocksSize);
     new Uint32Array(range, 32, 3).set(dataObj.fullSize);
@@ -1389,35 +1395,63 @@ function createBindGroups(dataObj) {
 }
 
 function createMarchOutputBindGroup(vertNum, indexNum, dataObj) {
-    var marchVertBuffer = device.createBuffer({
-        label: dataObj.id + ": vert out buffer",
-        size: 3 * vertNum * Float32Array.BYTES_PER_ELEMENT,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.VERTEX
+    // function to calc proper size of textures
+    var get3dSizeToFit = (num) => {
+        var rough1dSize = Math.round(Math.pow(num, 1/3));
+        // width has to be a multiple of 256 bytes to copy to a buffer later
+        // since using float (4 bytes), multiple of 64 elements
+        const width = Math.ceil(rough1dSize/64)*64;
+        const height = rough1dSize;
+        const depth = Math.ceil(num/(width*height));
+
+        return {
+            width: width,
+            height: height,
+            depthOrArrayLayers: depth
+        }
+    }
+    
+    const vertTextureSize = get3dSizeToFit(vertNum*3);
+    // console.log(vertTextureSize);
+    const indexTextureSize = get3dSizeToFit(indexNum);
+
+    var marchVertTexture = device.createTexture({
+        label: dataObj.id + ": vert out texture",
+        size: vertTextureSize,
+        dimension: "3d",
+        format: "r32float",
+        usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC
     }); 
-    var marchNormalBuffer = device.createBuffer({
-        label: dataObj.id + ": normal out buffer",
-        size: 3 * vertNum * Float32Array.BYTES_PER_ELEMENT,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.VERTEX
+    var marchNormalTexture = device.createTexture({
+        label: dataObj.id + ": normal out texture",
+        size: vertTextureSize,
+        dimension: "3d",
+        format: "r32float",
+        usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC
     });
-    var marchIndexBuffer = device.createBuffer({
-        label: dataObj.id + ": index out buffer",
-        size: indexNum * Uint32Array.BYTES_PER_ELEMENT,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.INDEX
+    var marchIndexTexture = device.createTexture({
+        label: dataObj.id + ": index out texture",
+        size: indexTextureSize,
+        dimension: "3d",
+        format: "r32uint",
+        usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC
     });
+    
+
 
     return [
         generateBG(
-            dataObj.marchData.pipelines.march.getBindGroupLayout(2),
+            marchData.bindGroupLayouts.march[2],
             [
-                marchVertBuffer,
-                marchNormalBuffer,
-                marchIndexBuffer
+                marchVertTexture.createView(),
+                marchNormalTexture.createView(),
+                marchIndexTexture.createView()
             ],
             "march out"
         ),
-        marchVertBuffer,
-        marchNormalBuffer,
-        marchIndexBuffer
+        marchVertTexture,
+        marchNormalTexture,
+        marchIndexTexture
     ]
 }
 
@@ -1503,7 +1537,6 @@ function createOffsetBindGroups(dataObj) {
             dataObj.marchData.buffers.indexOffsetTotals
         ]
     )
-
     // combined offset buffers into one bg
     dataObj.marchData.bindGroups.combinedOffset = generateBG(
         dataObj.marchData.pipelines.march.getBindGroupLayout(3),
@@ -1654,6 +1687,90 @@ async function getMarchCounts(dataObj, threshold) {
     return [vertNum, indNum];
 }
 
+async function copyMarchTexturesToBuffers(vertTex, normTex, indTex) {
+    var commandEncoder;
+
+    const vertTexCopySize = {
+        width: vertTex.width,
+        height: vertTex.height,
+        depthOrArrayLayers: vertTex.depthOrArrayLayers
+    }
+
+    const indTexCopySize = {
+        width: indTex.width,
+        height: indTex.height,
+        depthOrArrayLayers: indTex.depthOrArrayLayers
+    }
+
+    const vertTexSize = vertTex.width*vertTex.height*vertTex.depthOrArrayLayers;
+    const indTexSize = indTex.width*indTex.height*indTex.depthOrArrayLayers;
+
+    var marchVertBuffer = device.createBuffer({
+        label: "vert buffer",
+        size: vertTexSize * Float32Array.BYTES_PER_ELEMENT,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.VERTEX
+    }); 
+
+    commandEncoder = await device.createCommandEncoder();
+    commandEncoder.copyTextureToBuffer(
+        {texture: vertTex}, 
+        {
+            buffer: marchVertBuffer,
+            bytesPerRow: vertTexCopySize.width * 4,
+            rowsPerImage: vertTexCopySize.height
+        }, 
+        vertTexCopySize
+    );
+    device.queue.submit([commandEncoder.finish()]) 
+    device.queue.onSubmittedWorkDone();
+    vertTex.destroy();
+
+    var marchNormalBuffer = device.createBuffer({
+        label: "normal buffer",
+        size: vertTexSize * Float32Array.BYTES_PER_ELEMENT,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.VERTEX
+    });
+    commandEncoder = await device.createCommandEncoder();
+    commandEncoder.copyTextureToBuffer(
+        {texture: normTex}, 
+        {
+            buffer: marchNormalBuffer,
+            bytesPerRow: vertTexCopySize.width * 4,
+            rowsPerImage: vertTexCopySize.height
+        }, 
+        vertTexCopySize
+    );
+    device.queue.submit([commandEncoder.finish()]) 
+    device.queue.onSubmittedWorkDone();
+    normTex.destroy();
+
+    var marchIndexBuffer = device.createBuffer({
+        label: "index buffer",
+        size: indTexSize * Uint32Array.BYTES_PER_ELEMENT,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.INDEX
+    });
+    commandEncoder = await device.createCommandEncoder();
+    commandEncoder.copyTextureToBuffer(
+        {texture: indTex}, 
+        {
+            buffer: marchIndexBuffer,
+            bytesPerRow: indTexCopySize.width * 4,
+            rowsPerImage: indTexCopySize.height
+        }, 
+        indTexCopySize
+    );
+    device.queue.submit([commandEncoder.finish()]) 
+    device.queue.onSubmittedWorkDone();
+    indTex.destroy();
+
+    return {
+        vertex: marchVertBuffer,
+        // normals will be all 0 vectors
+        normal: marchNormalBuffer,
+        index: marchIndexBuffer
+    }
+}
+
 async function march(dataObj, meshObj, threshold) {
     
     // enumeration pass =====================================================================
@@ -1709,29 +1826,28 @@ async function march(dataObj, meshObj, threshold) {
 
     // marching pass =====================================================================
 
-    meshObj.indicesNum = indNum;
-    meshObj.vertsNum = vertNum;
-    //console.log(vertNum, indNum);
-
-    // if (vertNum == 0 || indNum == 0) {
-        
-    //     meshObj.verts = new Float32Array();
-    //     meshObj.normals = new Float32Array();
-    //     meshObj.indices = new Float32Array();
-    //     console.log("no verts")
-    //     return;
-    // }
+    if (vertNum == 0 || indNum == 0) {
+        // if mesh is now empty, update
+        meshObj.indicesNum = indNum;
+        meshObj.vertsNum = vertNum;
+        meshObj.verts = new Float32Array();
+        meshObj.normals = new Float32Array();
+        meshObj.indices = new Float32Array();
+        console.log("no verts")
+        return;
+    } else if (vertNum > 40000000){
+        // if more than a semi-arbitrary threshold value
+        console.log("sorry, too many vertices")
+        return
+    } else {
+        meshObj.indicesNum = indNum;
+        meshObj.vertsNum = vertNum;
+    }
 
     deleteBuffers(meshObj);
 
-    var [marchOutBindGroup, marchVertBuffer, marchNormalBuffer, marchIndexBuffer] = createMarchOutputBindGroup(vertNum, indNum, dataObj, false);
-    
-    // set the buffers in the mesh
-    meshObj.buffers = {
-        vertex: marchVertBuffer,
-        normal: marchNormalBuffer,
-        index: marchIndexBuffer
-    }
+    // create textures for holding verts + ind
+    var [marchOutBindGroup, marchVertTexture, marchNormalTexture, marchIndexTexture] = createMarchOutputBindGroup(vertNum, indNum, dataObj);
     
 
     var commandEncoder = device.createCommandEncoder();
@@ -1754,6 +1870,9 @@ async function march(dataObj, meshObj, threshold) {
     passEncoder6.end();
 
     device.queue.submit([commandEncoder.finish()]);
+    
+    meshObj.buffers = await copyMarchTexturesToBuffers(marchVertTexture, marchNormalTexture, marchIndexTexture);
+
 
     //await device.queue.onSubmittedWorkDone();
 }
@@ -2166,27 +2285,33 @@ async function marchFine(dataObj, meshObj, threshold) {
 
 
     // march pass =====================================================================================
-    meshObj.indicesNum = indNum;
-    meshObj.vertsNum = vertNum;
-    console.log(vertNum, indNum);
+    // meshObj.indicesNum = indNum;
+    // meshObj.vertsNum = vertNum;
+    // console.log(vertNum, indNum);
 
     if (vertNum == 0 || indNum == 0) {
+        // if mesh is now empty, update
+        meshObj.indicesNum = indNum;
+        meshObj.vertsNum = vertNum;
         meshObj.verts = new Float32Array();
         meshObj.normals = new Float32Array();
         meshObj.indices = new Float32Array();
         console.log("no verts")
         return;
+    } else if (vertNum > 40000000){
+        // if more than a semi-arbitrary threshold value
+        console.log("sorry, too many vertices")
+        return
+    } else {
+        meshObj.indicesNum = indNum;
+        meshObj.vertsNum = vertNum;
     }
+
     deleteBuffers(meshObj);
-    var [marchOutBindGroup, marchVertBuffer, marchNormalBuffer, marchIndexBuffer] = createMarchFineOutputBindGroup(vertNum, indNum, dataObj);
+    var [marchOutBindGroup, marchVertTexture, marchNormalTexture, marchIndexTexture] = createMarchOutputBindGroup(vertNum, indNum, dataObj);
+    // var [marchOutBindGroup, marchVertBuffer, marchNormalBuffer, marchIndexBuffer] = createMarchFineOutputBindGroup(vertNum, indNum, dataObj);
     
-    // set the buffers in the mesh
-    meshObj.buffers = {
-        vertex: marchVertBuffer,
-        // normals will be all 0 vectors
-        normal: marchNormalBuffer,
-        index: marchIndexBuffer
-    }
+    
 
     totalBlocks = dataObj.activeBlocks.length;
     blockOffset = 0;
@@ -2208,11 +2333,14 @@ async function marchFine(dataObj, meshObj, threshold) {
         passEncoder6.dispatchWorkgroups(thisNumBlocks);
         passEncoder6.end();
 
-        commandEncoder.copyBufferToBuffer(marchVertBuffer, 0, marchData.buffers.read, 0, 10*4);
+        // commandEncoder.copyBufferToBuffer(marchVertBuffer, 0, marchData.buffers.read, 0, 10*4);
 
         device.queue.submit([commandEncoder.finish()]);
         blockOffset += thisNumBlocks;
     }
+
+    meshObj.buffers = await copyMarchTexturesToBuffers(marchVertTexture, marchNormalTexture, marchIndexTexture);
+    
 }
 
 async function cleanupMarchData(dataObj) {

@@ -71,7 +71,7 @@ export async function march(...args) {
 }
 
 export async function marchMulti(datas, meshes, threshold) {
-    if (module == "wasm") {
+    if (module == "gpu") {
         // set off all marches asynchronously
         for (let i = 0; i < datas.length; i++) {
             march(datas[i], meshes[i], threshold);

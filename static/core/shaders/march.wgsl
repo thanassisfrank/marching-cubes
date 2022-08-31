@@ -43,9 +43,13 @@ struct Atoms {
 
 @group(1) @binding(0) var<storage, read_write> vars : Vars;
 
-@group(2) @binding(0) var<storage, read_write> verts : F32Buff;
-@group(2) @binding(1) var<storage, read_write> normals : F32Buff;
-@group(2) @binding(2) var<storage, read_write> indices : U32Buff;
+@group(2) @binding(0) var vertTexture : texture_storage_3d<r32float, write>;
+@group(2) @binding(1) var normalTexture : texture_storage_3d<r32float, write>;
+@group(2) @binding(2) var indexTexture : texture_storage_3d<r32uint, write>;
+
+// @group(2) @binding(0) var<storage, read_write> verts : F32Buff;
+// @group(2) @binding(1) var<storage, read_write> normals : F32Buff;
+// @group(2) @binding(2) var<storage, read_write> indices : U32Buff;
 
 @group(3) @binding(0) var<storage, read_write> WGVertOffsets : U32Buff;
 @group(3) @binding(1) var<storage, read_write> WGIndexOffsets : U32Buff;
@@ -84,36 +88,41 @@ fn getPointPos(x : u32, y : u32, z : u32, cellScale : u32) -> vec3<f32> {
 //     ).yzw;
 // }
 
-// fn setVertValue(x : f32, y : f32, z : f32, index : u32) {
-//     var coords : vec3<i32>;
-//     coords = vec3<i32>(posFromIndex(index*3, vec3<u32>(textureDimensions(vertTexture).zyx)).zyx);
-//     textureStore(
-//         vertTexture,
-//         coords,
-//         vec4<f32>(x, 0, 0, 0)
-//     );
-//     coords = vec3<i32>(posFromIndex(index*3 + 1, vec3<u32>(textureDimensions(vertTexture).zyx)).zyx);
-//     textureStore(
-//         vertTexture,
-//         coords,
-//         vec4<f32>(y, 0, 0, 0)
-//     );
-//     coords = vec3<i32>(posFromIndex(index*3 + 2, vec3<u32>(textureDimensions(vertTexture).zyx)).zyx);
-//     textureStore(
-//         vertTexture,
-//         coords,
-//         vec4<f32>(z, 0, 0, 0)
-//     );
-// }
+fn posFromIndex(i : u32, size : vec3<u32>) -> vec3<u32> {
+    return vec3<u32>(i/(size.y*size.z), (i/size.z)%size.y, i%size.z);
+}
 
-// fn setindexValue(val : u32, index) {
-//     var coords = vec3<i32>(posFromIndex(index, vec3<u32>(textureDimensions(indexTexture).zyx)).zyx);
-//     textureStore(
-//         indexTexture,
-//         coords,
-//         vec4<f32>(val, 0, 0, 0)
-//     );
-// }
+
+fn setVertValue(x : f32, y : f32, z : f32, index : u32) {
+    var coords : vec3<i32>;
+    coords = vec3<i32>(posFromIndex(index*3, vec3<u32>(textureDimensions(vertTexture).zyx)).zyx);
+    textureStore(
+        vertTexture,
+        coords,
+        vec4<f32>(x, 0, 0, 0)
+    );
+    coords = vec3<i32>(posFromIndex(index*3 + 1, vec3<u32>(textureDimensions(vertTexture).zyx)).zyx);
+    textureStore(
+        vertTexture,
+        coords,
+        vec4<f32>(y, 0, 0, 0)
+    );
+    coords = vec3<i32>(posFromIndex(index*3 + 2, vec3<u32>(textureDimensions(vertTexture).zyx)).zyx);
+    textureStore(
+        vertTexture,
+        coords,
+        vec4<f32>(z, 0, 0, 0)
+    );
+}
+
+fn setindexValue(val : u32, index : u32) {
+    var coords = vec3<i32>(posFromIndex(index, vec3<u32>(textureDimensions(indexTexture).zyx)).zyx);
+    textureStore(
+        indexTexture,
+        coords,
+        vec4<u32>(val, 0, 0, 0)
+    );
+}
 
 
 @compute @workgroup_size({{WGSizeX}}, {{WGSizeY}}, {{WGSizeZ}})
@@ -328,26 +337,29 @@ fn main(
         var vertOffset : u32 = WGVertOffsets.buffer[getIndex3d(wgid.x, wgid.y, wgid.z, wgnum)] + localVertOffsets[localIndex];
         var indexOffset : u32 = WGIndexOffsets.buffer[getIndex3d(wgid.x, wgid.y, wgid.z, wgnum)] + localIndexOffsets[localIndex];
 
+        // var i = 0u;
+        // loop {
+        //     if (i == vertNum*3u) {
+        //         break;
+        //     }
+        //     verts.buffer[3u*(vertOffset) + i] = thisVerts[i];
+        //     continuing {
+        //         i = i + 1u;
+        //     }
+        // }
         var i = 0u;
         loop {
-            if (i == vertNum*3u) {
-                break;
-            }
-            verts.buffer[3u*(vertOffset) + i] = thisVerts[i];
-            continuing {
-                i = i + 1u;
-            }
+            if (i == vertNum) {break;}
+            setVertValue(thisVerts[3*i], thisVerts[3*i + 1], thisVerts[3*i + 2], vertOffset + i);
+            continuing {i = i + 1u;}
         }
 
         i = 0u;
         loop {
-            if (i == indexNum) {
-                break;
-            }
-            indices.buffer[indexOffset + i] = u32(tables.tri[code][i]) + vertOffset;//indexNum;//localIndexOffsets[localIndex] + i;//
-            continuing {
-                i = i + 1u;
-            }
+            if (i == indexNum) {break;}
+            // indices.buffer[indexOffset + i] = u32(tables.tri[code][i]) + vertOffset;//indexNum;//localIndexOffsets[localIndex] + i;//
+            setindexValue(u32(tables.tri[code][i]) + vertOffset, indexOffset + i);
+            continuing {i = i + 1u;}
         }
     }
 }

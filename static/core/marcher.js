@@ -179,17 +179,67 @@ var marcherManager = {
                         )
 
                         const blockDeltaIDs = data.queryDeltaBlocks(this.marchData.loadedRange, newMarchDataRange);
-                        // update the data stored here
-                        await updateMarchFineData(
-                            this, 
-                            blockDeltaIDs.add, 
-                            blockDeltaIDs.remove,
-                            await this.data.fetchBlocks(blockDeltaIDs.add)
-                        );
+                        
+                        const allInOne = true;
+                        if (allInOne) {
+                            // update the data stored here
+                            // await marchFine(this, this.mesh, threshold);
+                            await updateMarchFineData(
+                                this, 
+                                blockDeltaIDs.add, 
+                                blockDeltaIDs.remove,
+                                await this.data.fetchBlocks(blockDeltaIDs.add)
+                            );
+                            
+                            await marchFine(this, this.mesh, threshold);
+                        } else {
+                            // the max amount of blocks to request in one go
+                            const chunkSize = 8192;
+                            const chunksCount = Math.ceil(blockDeltaIDs.add.length/chunkSize);
+                            console.log("chunks to request:", chunksCount);
+                            if (chunksCount > 0) {
+                                const removeChunkSize = blockDeltaIDs.remove.length/chunksCount;
+                                var dataChunks = [];
+
+                                for (let i = 0; i < chunksCount; i++) {
+                                    const thisAddBlocks = blockDeltaIDs.add.slice(i*chunkSize, (i+1)*chunkSize);
+                                    dataChunks.push(this.data.fetchBlocks(thisAddBlocks));
+                                }
+
+
+
+
+
+                                // there are blocks to add
+                                for (let i = 0; i < chunksCount; i++) {
+                                    const thisAddBlocks = blockDeltaIDs.add.slice(i*chunkSize, (i+1)*chunkSize);
+                                    const thisRemoveBlocks = blockDeltaIDs.remove.slice(i*removeChunkSize, (i+1)*removeChunkSize);
+                                    chunkUpdates.push(
+                                        updateMarchFineData(
+                                            this, 
+                                            thisAddBlocks, 
+                                            thisRemoveBlocks,
+                                            await this.data.fetchBlocks(thisAddBlocks)
+                                        ).then(
+                                            marchFine(this, this.mesh, threshold)
+                                        )
+                                    )
+                                }
+                                await Promise.all(chunkUpdates);
+                            } else {
+                                // none to add, just remove everything
+                                await updateMarchFineData(
+                                    this, 
+                                    blockDeltaIDs.add, 
+                                    blockDeltaIDs.remove,
+                                    await this.data.fetchBlocks(blockDeltaIDs.add)
+                                );
+                                
+                                await marchFine(this, this.mesh, threshold);
+                            }
+                        }
+                        
                         this.marchData.loadedRange = newMarchDataRange;
-
-                        await marchFine(this, this.mesh, threshold);
-
                     };
                     if (buffersUpdateNeeded()) this.updateBuffers();
                     this.busy = false;

@@ -42,3 +42,6 @@ let v7 = data[i][j+1][k+1] > threshold;
 //generates code for each gridcell
 let code = v0<<0|v1<<1|v2<<2|v3<<3|v4<<4|v5<<5|v6<<6|v7<<7;
 console.log(code.toString(2))
+
+// calculate the total used space: data, code, verts + normals, indices
+const used = dataObj.volume*4 + (dataObj.size[0]-1)*(dataObj.size[1]-1)*(dataObj.size[2]-1)*4 + vertsNumber*3*4*2 + indicesNumber*4;

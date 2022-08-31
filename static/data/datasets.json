@@ -159,5 +159,40 @@
             "z": 1
         },
         "dataType": "int16"
+    },
+    "multiTest": {
+        "name": "multi test",
+        "path": "data/multiTest",
+        "complexAvailable": true,
+        "type": "structuredGrid",
+        "originalFile": "multiTest.vts",
+        "pieces": {
+            "0": {
+                "size": {
+                    "x": 10,
+                    "y": 10,
+                    "z": 15
+                }
+            },
+            "1": {
+                "size": {
+                    "x": 10,
+                    "y": 10,
+                    "z": 25
+                }
+            }
+        },
+        "data": {
+            "density": {
+                "name": "Density",
+                "dataType": "float32",
+                "components": 1
+            },
+            "velocity": {
+                "name": "Vel",
+                "dataType": "uint8",
+                "components": 3
+            }
+        }
     }
 }
