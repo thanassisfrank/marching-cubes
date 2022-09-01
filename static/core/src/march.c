@@ -825,6 +825,7 @@ void EMSCRIPTEN_KEEPALIVE addVerts(
 // extract isosurface 
 int EMSCRIPTEN_KEEPALIVE generateMesh(
     float* data,
+    float* points,
     int dataSizeX,
     int dataSizeY,
     int dataSizeZ,
@@ -907,6 +908,14 @@ float getFineDataValue(float* fineData, uint slotNum, struct Vec3Int pos) {
     return fineData[slotNum*blockVol + blockDimensions.y * blockDimensions.z * pos.x + blockDimensions.z * pos.y + pos.z];
 }
 
+struct Vec3Float getFinePoint(float* finePoints, uint slotNum, struct Vec3Int pos) {
+    return (struct Vec3Float){
+        finePoints[3*(slotNum*blockVol + blockDimensions.y * blockDimensions.z * pos.x + blockDimensions.z * pos.y + pos.z) + 0],
+        finePoints[3*(slotNum*blockVol + blockDimensions.y * blockDimensions.z * pos.x + blockDimensions.z * pos.y + pos.z) + 1],
+        finePoints[3*(slotNum*blockVol + blockDimensions.y * blockDimensions.z * pos.x + blockDimensions.z * pos.y + pos.z) + 2],
+    };
+}
+
 void getNeighboursPresent(bool* out, int* neighbourSlots, struct Vec3Int blockPos, int* blockLocations, struct Vec3Int blocksSize) {
     out[0] = true;
     for (int i = 1; i < 8; i++) {
@@ -952,7 +961,7 @@ bool neededNeighboursPresent(struct Vec3Int cellPos, bool* neighboursPresent) {
     
 // }
 
-void populateBlockData(float* fineData, float blockData[5][5][5], int* slotNums) {
+void populateBlockData(float* fineData, float* finePoints, float blockData[5][5][5], struct Vec3Float blockPoints[5][5][5], int* slotNums, bool points) {
     for (int i = 0; i < blockSizeX; i++) {
         for (int j = 0; j < blockSizeY; j++) {
             for (int k = 0; k < blockSizeZ; k++) {
@@ -981,6 +990,9 @@ void populateBlockData(float* fineData, float blockData[5][5][5], int* slotNums)
                         k + neighbourConfigs[x].z
                     };
                     blockData[dst.x][dst.y][dst.z] = getFineDataValue(fineData, slotNums[x], src);
+                    if (points) {
+                        blockPoints[dst.x][dst.y][dst.z] = getFinePoint(finePoints, slotNums[x], src);
+                    }
                 }
             }
         }
@@ -1007,7 +1019,7 @@ void addVertsFine(
     struct Vec3Int cellPos,
     struct Vec3Int blockPos,
     float blockData[5][5][5],
-    // float* points,
+    struct Vec3Float blockPoints[5][5][5],
     struct Vec3Float scale,
     float threshold, 
     bool pointsBool
@@ -1041,20 +1053,13 @@ void addVertsFine(
             float fac = (threshold-va)/(vb-va);
 
             if (pointsBool == true) {
-                // // if the points are defined explicitly
-                // float pa[3] = {
-                //     points[3*aInd + 0],
-                //     points[3*aInd + 1],
-                //     points[3*aInd + 2]
-                // };
-                // float pb[3] = {
-                //     points[3*bInd + 0],
-                //     points[3*bInd + 1],
-                //     points[3*bInd + 2]
-                // };
-                // verts[3*(*curr) + 0] = pa[0]*(1.0-fac) + pb[0]*fac;
-                // verts[3*(*curr) + 1] = pa[1]*(1.0-fac) + pb[1]*fac;
-                // verts[3*(*curr) + 2] = pa[2]*(1.0-fac) + pb[2]*fac;
+                // if the points are defined explicitly
+                struct Vec3Float pa = blockPoints[cellPos.x + a[0]][cellPos.y + a[1]][cellPos.z + a[2]];
+                struct Vec3Float pb = blockPoints[cellPos.x + b[0]][cellPos.y + b[1]][cellPos.z + b[2]];
+
+                verts[3*(*curr) + 0] = pa.x*(1.0-fac) + pb.x*fac;
+                verts[3*(*curr) + 1] = pa.y*(1.0-fac) + pb.y*fac;
+                verts[3*(*curr) + 2] = pa.z*(1.0-fac) + pb.z*fac;
             } else {
                 verts[3*(*curr) + 0] = ((float)a[0]*(1-fac) + (float)b[0]*fac + (float)cellPos.x + (float)blockPos.x*blockSizeX)*scale.x;
                 verts[3*(*curr) + 1] = ((float)a[1]*(1-fac) + (float)b[1]*fac + (float)cellPos.y + (float)blockPos.y*blockSizeY)*scale.y;
@@ -1071,6 +1076,7 @@ void addVertsFine(
 // extract isosurface from fine data
 int EMSCRIPTEN_KEEPALIVE generateMeshFine(
     float* fineData,
+    float* finePoints,
     int blocksSizeX, // size of dataset in blocks
     int blocksSizeY, // size of dataset in blocks
     int blocksSizeZ, // size of dataset in blocks
@@ -1094,9 +1100,8 @@ int EMSCRIPTEN_KEEPALIVE generateMeshFine(
     vertsNum = 0;
     indicesNum = 0;
 
-    console_log_int(12345);
 
-    console_log_int(activeBlocksCount);
+    // console_log_int(activeBlocksCount);
     // enumeration step
     for (uint x = 0; x < activeBlocksCount; x++) {
         // figure out if this point has a valid cell associated with it
@@ -1114,25 +1119,11 @@ int EMSCRIPTEN_KEEPALIVE generateMeshFine(
         bool neighboursPresent[8];
         int neighbourSlotNums[8];
         neighbourSlotNums[0] = slotNum; // set the slot number of this block
-        // if (x == 10) {
-        //     console_log_int(neighbourSlotNums[0]);
-        //     console_log_int(neighbourSlotNums[1]);
-        //     console_log_int(neighbourSlotNums[2]);
-        //     console_log_int(neighbourSlotNums[3]);
-        //     console_log_int(neighbourSlotNums[4]);
-        //     console_log_int(neighbourSlotNums[5]);
-        //     console_log_int(neighbourSlotNums[7]);
-        // }
         getNeighboursPresent(neighboursPresent, neighbourSlotNums, blockPos, blockLocations, blocksSize);
         // grab all needed data
         float blockData[blockSizeX + 1][blockSizeX + 1][blockSizeX + 1];
-        populateBlockData(fineData, blockData, neighbourSlotNums);
-
-        // if (blockSum(blockData) != 0) {
-        //     // always 10???
-        //     console_log_float(blockSum(blockData));
-        // }
-        // console_log_float(blockData[4][4][4]);
+        struct Vec3Float blockPoints[blockSizeX + 1][blockSizeX + 1][blockSizeX + 1];
+        populateBlockData(fineData, finePoints, blockData, blockPoints, neighbourSlotNums, false);
 
         for (int i = 0; i < blockDimensions.x; i++) {
             for (int j = 0; j < blockDimensions.y; j++) {
@@ -1185,8 +1176,8 @@ int EMSCRIPTEN_KEEPALIVE generateMeshFine(
     verts = (float*) malloc(vertsNum * 3 * sizeof(float));
     indices = (uint*) malloc(indicesNum * sizeof(uint));
 
-    console_log_int(vertsNum);
-    console_log_int(indicesNum);
+    // console_log_int(vertsNum);
+    // console_log_int(indicesNum);
 
     uint currVert = 0;
     uint currInd = 0;
@@ -1210,7 +1201,8 @@ int EMSCRIPTEN_KEEPALIVE generateMeshFine(
         getNeighboursPresent(neighboursPresent, neighbourSlotNums, blockPos, blockLocations, blocksSize);
         // grab all needed data
         float blockData[blockSizeX + 1][blockSizeX + 1][blockSizeX + 1];
-        populateBlockData(fineData, blockData, neighbourSlotNums);
+        struct Vec3Float blockPoints[blockSizeX + 1][blockSizeX + 1][blockSizeX + 1];
+        populateBlockData(fineData, finePoints, blockData, blockPoints, neighbourSlotNums, pointsBool);
 
         for (int i = 0; i < blockDimensions.x; i++) {
             for (int j = 0; j < blockDimensions.y; j++) {
@@ -1221,25 +1213,6 @@ int EMSCRIPTEN_KEEPALIVE generateMeshFine(
                     // get the code for this cell
                     int code = 0;
                     for (int l = 0; l < 8; l++) {
-                        // struct Vec3Int thisBlockPos = blockPos;
-                        // int* c = vertCoordTable[l];
-                        // struct Vec3Int pos = {i + c[0], j + c[1], k + c[2]};
-                        // if (pos.x == blockDimensions.x) {
-                        //     thisBlockPos.x++;
-                        //     pos.x = 0;
-                        // }
-                        // if (pos.y == blockDimensions.y) {
-                        //     thisBlockPos.y++;
-                        //     pos.y = 0;
-                        // }
-                        // if (pos.z == blockDimensions.z) {
-                        //     thisBlockPos.z++;
-                        //     pos.z = 0;
-                        // }
-                        // uint thisSlotNum = blockLocations[indexFromPos(thisBlockPos, blocksSize)];
-                        // float val = getFineDataValue(fineData, thisSlotNum, pos);
-                        // code |= (val > threshold) << l;
-                        // struct Vec3Int thisBlockPos = blockPos;
                         int* c = vertCoordTable[l];
                         struct Vec3Int pos = {i + c[0], j + c[1], k + c[2]};
                         
@@ -1257,7 +1230,7 @@ int EMSCRIPTEN_KEEPALIVE generateMeshFine(
                     addIndices(indices, &currInd, currVert, code);
 
                     // add vertices for this cell
-                    addVertsFine(verts, &currVert, code, (struct Vec3Int){i, j, k}, blockPos, blockData, scale, threshold, false);
+                    addVertsFine(verts, &currVert, code, (struct Vec3Int){i, j, k}, blockPos, blockData, blockPoints, scale, threshold, pointsBool);
                 }
             }
         }

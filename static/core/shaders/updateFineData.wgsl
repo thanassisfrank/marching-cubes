@@ -17,7 +17,7 @@ struct UpdateInfo {
     blockVol : u32
 }
 
-@group(0) @binding(0) var fineDataStorage : texture_storage_3d<r32float, write>;
+@group(0) @binding(0) var fineDataStorage : texture_storage_3d<{{StorageTexFormat}}, write>;
 @group(0) @binding(1) var newFineData : texture_3d<f32>;
 @group(0) @binding(2) var<storage, read> addBlocks : U32Buff;
 @group(0) @binding(3) var<storage, read> removeBlocks : U32Buff;
@@ -36,25 +36,46 @@ fn posFromIndex(i : u32, size : vec3<u32>) -> vec3<u32> {
     return vec3<u32>(i/(size.y*size.z), (i/size.z)%size.y, i%size.z);
 }
 
-fn getVal(localIndex : u32, blockIndex : u32) -> f32 {
+// fn getVal(localIndex : u32, blockIndex : u32) -> f32 {
+//     // linear index of texel
+//     var i = blockIndex * {{WGVol}}u + localIndex;
+//     var coords = vec3<i32>(posFromIndex(i, vec3<u32>(textureDimensions(newFineData, 0).zyx)).zyx);
+//     return f32(textureLoad(
+//         newFineData,
+//         coords,
+//         0
+//     ).x);
+// }
+
+// fn writeVal(localIndex : u32, blockIndex : u32, val : f32) {
+//     // linear index of texel
+//     var i = blockIndex * {{WGVol}}u + localIndex;
+//     var coords = vec3<i32>(posFromIndex(i, vec3<u32>(textureDimensions(fineDataStorage).zyx)).zyx);
+//     textureStore(
+//         fineDataStorage,
+//         coords,
+//         vec4<f32>(val, 0, 0, 0)
+//     );
+// }
+fn getVal(localIndex : u32, blockIndex : u32) -> vec4<f32> {
     // linear index of texel
     var i = blockIndex * {{WGVol}}u + localIndex;
     var coords = vec3<i32>(posFromIndex(i, vec3<u32>(textureDimensions(newFineData, 0).zyx)).zyx);
-    return f32(textureLoad(
+    return textureLoad(
         newFineData,
         coords,
         0
-    ).x);
+    );
 }
 
-fn writeVal(localIndex : u32, blockIndex : u32, val : f32) {
+fn writeVal(localIndex : u32, blockIndex : u32, val : vec4<f32>) {
     // linear index of texel
     var i = blockIndex * {{WGVol}}u + localIndex;
     var coords = vec3<i32>(posFromIndex(i, vec3<u32>(textureDimensions(fineDataStorage).zyx)).zyx);
     textureStore(
         fineDataStorage,
         coords,
-        vec4<f32>(val, 0, 0, 0)
+        val
     );
 }
 

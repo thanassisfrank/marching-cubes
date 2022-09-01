@@ -27,8 +27,9 @@ struct DataInfo {
     @size(4) threshold : f32,         // threshold value
     @size(12) blockOffset : u32,      // block offset
     @size(16) blocksSize : vec3<u32>, // size in blocks
-    @size(16) size : vec3<u32>        // size of dataset in points
-}
+    @size(16) size : vec3<u32>,       // size of dataset in points
+    structuredGrid : u32,
+};
 
 struct U32Buffer {
     buffer : array<u32>,
@@ -70,6 +71,7 @@ var<workgroup> WGIndex : u32;
 
 // 5x5x5 grid to store all the data potentially needed to generate the cells
 var<workgroup> blockData : array<array<array<f32, 5>, 5>, 5>;
+var<workgroup> blockPoints : array<array<array<vec3<f32>, 5>, 5>, 5>;
 
 // the grid of cells that will be marched
 // starts as WGSize - 1 and expanded if neighbours on the correct side exist
@@ -106,6 +108,17 @@ fn getVal(x : u32, y : u32, z : u32, blockIndex : u32, packing : u32) -> f32 {
         coords,
         0
     ).x);
+}
+
+fn getPointPos(x : u32, y : u32, z : u32, blockIndex : u32, packing : u32) -> vec3<f32> {
+    // linear index of texel
+    var i = blockIndex * {{WGVol}}u + getIndex(x, y, z, WGSize);
+    var coords = vec3<i32>(posFromIndex(i, vec3<u32>(textureDimensions(data, 0).zyx)).zyx);
+    return textureLoad(
+        data,
+        coords,
+        0
+    ).yzw;
 }
 
 fn posFromIndex(i : u32, size : vec3<u32>) -> vec3<u32> {
@@ -194,6 +207,9 @@ fn main(
     @builtin(local_invocation_index) localIndex : u32, 
     @builtin(workgroup_id) WGId : vec3<u32>
 ) {
+    const TRUE = 1u;
+    const FALSE = 0u;
+
     if (all(lid == vec3<u32>(0u))) {
         WGSize = vec3<u32>({{WGSizeX}}u, {{WGSizeY}}u, {{WGSizeZ}}u);
         WGVol = {{WGVol}}u;
@@ -217,6 +233,10 @@ fn main(
     // first load all the required data into workgroup memory ===========================================================
     var val = getVal(lid.x, lid.y, lid.z, thisBlockLoc, packing);
     blockData[lid.x][lid.y][lid.z] = val;
+    if (dataInfo.structuredGrid == TRUE) {
+        var thisPoint = getPointPos(lid.x, lid.y, lid.z, thisBlockLoc, packing);
+        blockPoints[lid.x][lid.y][lid.z] = thisPoint;
+    }
 
     // a vector that describes on what sides this thread has neighbouring blocks (if they exist)
     // corner(fwd): (1, 1, 1), edge(fwd): (1, 1, 0), face(fwd): (1, 0, 0), body: (0, 0, 0,)
@@ -291,6 +311,9 @@ fn main(
                     var src = lid*(vec3<u32>(1u) - neighbourConfigs[i]);
                     var dst = lid + neighbourConfigs[i];
                     blockData[dst.x][dst.y][dst.z] = getVal(src.x, src.y, src.z, neighbourIndex, packing);
+                    if (dataInfo.structuredGrid == TRUE) {
+                        blockPoints[dst.x][dst.y][dst.z] = getPointPos(src.x, src.y, src.z, neighbourIndex, packing);
+                    }
                 }
             }
             continuing{i=i+1u;}
@@ -372,9 +395,20 @@ fn main(
             var vb : f32 = blockData[lid.x + b[0]][lid.y + b[1]][lid.z + b[2]];
             var fac : f32 = (dataInfo.threshold - va)/(vb - va);
             // fill vertices
-            thisVerts[3u*i + 0u] = mix(f32(a[0]), f32(b[0]), fac) + f32(lid.x + thisBlockPos.x * WGSize.x);// * f32(cellScale) * dataInfo.cellSize.x;
-            thisVerts[3u*i + 1u] = mix(f32(a[1]), f32(b[1]), fac) + f32(lid.y + thisBlockPos.y * WGSize.y);// * f32(cellScale) * dataInfo.cellSize.y;
-            thisVerts[3u*i + 2u] = mix(f32(a[2]), f32(b[2]), fac) + f32(lid.z + thisBlockPos.z * WGSize.z);// * f32(cellScale) * dataInfo.cellSize.z;
+            if (dataInfo.structuredGrid == TRUE) {
+                var pa = blockPoints[lid.x + a[0]][lid.y + a[1]][lid.z + a[2]];
+                var pb = blockPoints[lid.x + b[0]][lid.y + b[1]][lid.z + b[2]];
+
+                var p = mix(pa, pb, fac);
+
+                thisVerts[3u*i + 0u] = p.x;
+                thisVerts[3u*i + 1u] = p.y;
+                thisVerts[3u*i + 2u] = p.z;
+            } else {
+                thisVerts[3u*i + 0u] = mix(f32(a[0]), f32(b[0]), fac) + f32(lid.x + thisBlockPos.x * WGSize.x);// * f32(cellScale) * dataInfo.cellSize.x;
+                thisVerts[3u*i + 1u] = mix(f32(a[1]), f32(b[1]), fac) + f32(lid.y + thisBlockPos.y * WGSize.y);// * f32(cellScale) * dataInfo.cellSize.y;
+                thisVerts[3u*i + 2u] = mix(f32(a[2]), f32(b[2]), fac) + f32(lid.z + thisBlockPos.z * WGSize.z);// * f32(cellScale) * dataInfo.cellSize.z;
+            }
 
             continuing {i = i + 1u;}
         }

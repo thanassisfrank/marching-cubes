@@ -26,8 +26,9 @@ struct DataInfo {
     @size(4) threshold : f32,         // threshold value
     @size(12) blockOffset : u32,      // block offset
     @size(16) blocksSize : vec3<u32>, // size in blocks
-    @size(16) size : vec3<u32>        // size of dataset in points
-}
+    @size(16) size : vec3<u32>,       // size of dataset in points
+    structuredGrid : u32,
+};
 
 struct U32Buffer {
     buffer : array<u32>,

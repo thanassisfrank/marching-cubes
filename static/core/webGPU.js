@@ -880,8 +880,6 @@ async function setupMarchModule() {
         generateComputePipeline(prefixSumACode, formatObj, marchData.bindGroupLayouts.prefix),
         generateComputePipeline(prefixSumBCode, formatObj, marchData.bindGroupLayouts.prefix),
     ]
-
-    marchData.pipelines.updateFineData = generateComputePipeline(updateFineDataCode, formatObj, marchData.bindGroupLayouts.updateFineData);
 }
 
 async function waitForDone() {
@@ -969,6 +967,11 @@ function createBindGroupLayouts() {
         generateBGLayout("cbs cbr cbs", "update fine data bg 1")
     ]
 
+    marchData.bindGroupLayouts.updateFineDataSG = [
+        generateBGLayout("cw3drgba32float ctn3df cbr cbr cbr", "update fine data bg 0"),
+        generateBGLayout("cbs cbr cbs", "update fine data bg 1")
+    ]
+
     marchData.bindGroupLayouts.transformVerts = [
         generateBGLayout("cbr cbr"),
         generateBGLayout("cbs cbs cbs"),
@@ -982,8 +985,7 @@ function getWGCount(dataObj) {
         y: Math.ceil((dataObj.size[1]-1)/(WGSize.y * cellScale)),
         z: Math.ceil((dataObj.size[2]-1)/(WGSize.z * cellScale))
     }
-    console.log("fusifnjdoigjos");
-    console.log(WGCount, dataObj.size);
+    // console.log(WGCount, dataObj.size);
     WGCount.val = WGCount.x*WGCount.y*WGCount.z;
 
     dataObj.marchData.WGCount = WGCount;
@@ -1060,18 +1062,26 @@ async function setupMarchFine(dataObj) {
     enumerateFineCode = await enumerateFineCode;
     marchFineCode = await marchFineCode;
 
-    const formatObj = {
+    var formatObj = {
         "packing": dataObj.marchData.packing,
         "WGSizeX": WGSize.x,
         "WGSizeY": WGSize.y,
         "WGSizeZ": WGSize.z,
-        "WGVol": WGSize.x * WGSize.y * WGSize.z
+        "WGVol": WGSize.x * WGSize.y * WGSize.z,
+        "MaxWGSize": MaxWGSize,
+        "StorageTexFormat": "r32float"
+    }
+    var updateLayout = marchData.bindGroupLayouts.updateFineData;
+    if (dataObj.structuredGrid) {
+        formatObj.StorageTexFormat = "rgba32float";
+        updateLayout = marchData.bindGroupLayouts.updateFineDataSG;
     }
 
     // create the pipelines
     dataObj.marchData.pipelines = {
         enumerateFine: generateComputePipeline(enumerateFineCode, formatObj, marchData.bindGroupLayouts.enumerateFine),
-        marchFine: generateComputePipeline(marchFineCode, formatObj, marchData.bindGroupLayouts.marchFine)
+        marchFine: generateComputePipeline(marchFineCode, formatObj, marchData.bindGroupLayouts.marchFine),
+        updateFineData: generateComputePipeline(updateFineDataCode, formatObj, updateLayout)
     }
     console.log("added")
 
@@ -1109,17 +1119,6 @@ async function setupMarchFine(dataObj) {
         "buffer offset fine"
 
     );
-    // dataObj.marchData.bindGroups.bufferOffset = device.createBindGroup({
-    //     layout: marchData.bindGroupLayouts.prefix[1],
-    //     entries: [
-    //         {
-    //             binding: 0,
-    //             resource: {
-    //                 buffer: dataObj.marchData.buffers.bufferOffset
-    //             }
-    //         }
-    //     ]
-    // });
 
     // create the fine data texture
     const textureSize = {};
@@ -1132,11 +1131,15 @@ async function setupMarchFine(dataObj) {
         textureSize.height = MaxFineDataDimension;
         textureSize.depthOrArrayLayers = MaxFineDataDimension;
     }
+    var format = "r32float";
+    if (dataObj.structuredGrid) format = "rgba32float";
+
+
     dataObj.marchData.textures.dataFine = device.createTexture({
         label: "whole data texture",
         size: textureSize,
         dimension: "3d",
-        format: "r32float",
+        format: format,
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC
     })
 
@@ -1164,7 +1167,7 @@ async function setupMarchFine(dataObj) {
 
     dataObj.marchData.buffers.dataInfoFine = device.createBuffer({
         label: dataObj.id + ": fine data info buffer",
-        size: 48,
+        size: 52,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
         mappedAtCreation: true
     }); 
@@ -1173,6 +1176,7 @@ async function setupMarchFine(dataObj) {
 
     new Uint32Array(range, 16, 3).set(dataObj.blocksSize);
     new Uint32Array(range, 32, 3).set(dataObj.fullSize);
+    if (dataObj.structuredGrid) new Uint32Array(range, 48, 1).set([1]);
     
     dataObj.marchData.buffers.dataInfoFine.unmap();
 
@@ -1842,7 +1846,9 @@ async function march(dataObj, meshObj, threshold) {
     } else {
         meshObj.indicesNum = indNum;
         meshObj.vertsNum = vertNum;
+        // console.log(vertNum, indNum);
     }
+
 
     deleteBuffers(meshObj);
 
@@ -1952,7 +1958,7 @@ async function updateActiveBlocks(dataObj) {
 // and cleaning up the previous buffers if they exist
 
 // need block locations
-async function updateMarchFineData(dataObj, addBlocks, removeBlocks, fineData) {
+async function updateMarchFineData(dataObj, addBlocks, removeBlocks, fineData, finePointsData) {
     console.log("to add:", addBlocks.length);
     console.log("to remove:", removeBlocks.length);
     console.log("length of new data:", fineData.length);
@@ -2005,6 +2011,7 @@ async function updateMarchFineData(dataObj, addBlocks, removeBlocks, fineData) {
     dataObj.marchData.buffers.emptyLocations.unmap();
 
     // create storage texture same size as fine data texture
+    // going to be altered by the shader by adding/removing blocks
     const fineDataTextureSize = {
         width: dataObj.marchData.textures.dataFine.width,
         height: dataObj.marchData.textures.dataFine.height,
@@ -2014,7 +2021,7 @@ async function updateMarchFineData(dataObj, addBlocks, removeBlocks, fineData) {
         label: "writeable fine data",
         size: fineDataTextureSize,
         dimension: "3d",
-        format: "r32float",
+        format: dataObj.marchData.textures.dataFine.format,
         usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC
     })
 
@@ -2078,13 +2085,29 @@ async function updateMarchFineData(dataObj, addBlocks, removeBlocks, fineData) {
         label: "new fine data tex",
         size: newFineDataTextureSize,
         dimension: "3d",
-        format: "r32float",
+        format: dataObj.marchData.textures.dataFine.format,
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
     });
+
+    // make an array for all the new data
+    var stride = 1;
+    if (finePointsData) stride = 4;
     var newFineDataBuffer = new Float32Array(
-        newFineDataTextureSize.width*newFineDataTextureSize.height*newFineDataTextureSize.depthOrArrayLayers
+        newFineDataTextureSize.width*newFineDataTextureSize.height*newFineDataTextureSize.depthOrArrayLayers*stride
     )
-    newFineDataBuffer.set(fineData);
+
+    // set the new data into the texture
+    if (finePointsData) {
+        for (let i = 0; i < newFineDataBuffer.length/4; i++) {
+            newFineDataBuffer[4*i + 0] = fineData[i];
+            newFineDataBuffer[4*i + 1] = finePointsData[3*i + 0];
+            newFineDataBuffer[4*i + 2] = finePointsData[3*i + 1];
+            newFineDataBuffer[4*i + 3] = finePointsData[3*i + 2];
+        }
+    } else {
+        newFineDataBuffer.set(fineData);
+    }
+
     device.queue.writeTexture(
         {
             texture: dataObj.marchData.textures.newFineData
@@ -2092,7 +2115,7 @@ async function updateMarchFineData(dataObj, addBlocks, removeBlocks, fineData) {
         newFineDataBuffer,
         {
             offset: 0,
-            bytesPerRow: newFineDataTextureSize.width * 4,
+            bytesPerRow: newFineDataTextureSize.width * 4 * stride,
             rowsPerImage: newFineDataTextureSize.height
         },
         newFineDataTextureSize
@@ -2101,9 +2124,9 @@ async function updateMarchFineData(dataObj, addBlocks, removeBlocks, fineData) {
     // run the update shader
     var commandEncoder = await device.createCommandEncoder();
     var passEncoder = commandEncoder.beginComputePass();
-    passEncoder.setPipeline(marchData.pipelines.updateFineData);
+    passEncoder.setPipeline(dataObj.marchData.pipelines.updateFineData);
     passEncoder.setBindGroup(0, generateBG(
-        marchData.pipelines.updateFineData.getBindGroupLayout(0),
+        dataObj.marchData.pipelines.updateFineData.getBindGroupLayout(0),
         [
             dataObj.marchData.textures.fineDataStorage.createView(),
             dataObj.marchData.textures.newFineData.createView(),
@@ -2114,7 +2137,7 @@ async function updateMarchFineData(dataObj, addBlocks, removeBlocks, fineData) {
         "update fine data 0"
     ))
     passEncoder.setBindGroup(1, generateBG(
-        marchData.pipelines.updateFineData.getBindGroupLayout(1),
+        dataObj.marchData.pipelines.updateFineData.getBindGroupLayout(1),
         [
             dataObj.marchData.buffers.blockLocations,
             dataObj.marchData.buffers.emptyLocations,
@@ -2723,9 +2746,9 @@ async function renderView(ctx, projMat, modelViewMat, box, meshes, points) {
             clampBox(box, ctx.canvas.getBoundingClientRect());
             passEncoder.setScissorRect(box.left, box.top, box.width, box.height);
 
-            if (meshObj.buffers.vertex.state != undefined) {
-                console.log(meshObj.buffers.vertex.state);
-            }
+            // if (meshObj.buffers.vertex.state != undefined) {
+            //     console.log(meshObj.buffers.vertex.state);
+            // }
             if (points) {
                 // check if the buffers are not destroyed
                 passEncoder.setPipeline(pointsRenderPipeline);

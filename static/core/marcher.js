@@ -50,6 +50,7 @@ var marcherManager = {
         this.users = 0;
         // stores a reference to an instance of data object
         this.data = data;
+        this.structuredGrid = data.structuredGrid;
         this.size = data.size;
         this.fullSize = data.fullSize;
         // flag for if the marcher is for a multiblock dataset and so is also multiblock
@@ -57,7 +58,7 @@ var marcherManager = {
 
         this.mesh;
 
-        this.dataType = data.dataType;
+        this.dataType = data.getDataType();
         this.pointsDataType = data.pointsDataType;
 
         // stores other marcher objects if data is multiblock
@@ -184,12 +185,23 @@ var marcherManager = {
                         if (allInOne) {
                             // update the data stored here
                             // await marchFine(this, this.mesh, threshold);
-                            await updateMarchFineData(
-                                this, 
-                                blockDeltaIDs.add, 
-                                blockDeltaIDs.remove,
-                                await this.data.fetchBlocks(blockDeltaIDs.add)
-                            );
+                            if (data.structuredGrid) {
+                                await updateMarchFineData(
+                                    this, 
+                                    blockDeltaIDs.add, 
+                                    blockDeltaIDs.remove,
+                                    await this.data.fetchBlocks(blockDeltaIDs.add),
+                                    await this.data.fetchBlocks(blockDeltaIDs.add, true)
+                                );
+                            } else {
+                                await updateMarchFineData(
+                                    this, 
+                                    blockDeltaIDs.add, 
+                                    blockDeltaIDs.remove,
+                                    await this.data.fetchBlocks(blockDeltaIDs.add)
+                                );
+                            }
+                            
                             
                             await marchFine(this, this.mesh, threshold);
                         } else {

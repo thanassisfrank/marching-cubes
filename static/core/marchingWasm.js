@@ -122,11 +122,12 @@ async function setupData(dataObj) {
         dataObj.marchData.buffers.data.allocate();
         dataObj.marchData.buffers.data.set(dataObj.data);
 
-        // if (dataObj.structuredGrid) {
-        //     const pointsLoc = marchData.assignPointsLocation(...dataObj.size);
-        //     const pointsArray = new Float32Array(marchData.memory.buffer, pointsLoc, dataObj.volume*3);
-        //     pointsArray.set(Float32Array.from(dataObj.points));
-        // }
+
+        if (dataObj.structuredGrid) {
+            dataObj.marchData.buffers.points = new Buffer(dataObj.marchData, Float32Array, dataObj.volume*3);
+            dataObj.marchData.buffers.points.allocate();
+            dataObj.marchData.buffers.points.set(dataObj.points);
+        }
     };
 }
 
@@ -146,11 +147,10 @@ async function setupMarchFine(dataObj) {
     // make locations occupied
     dataObj.marchData.arrays.locationsOccupied = new Uint8Array(fineDataBlockCount); // not in WASM instance
 
-    // if (dataObj.structuredGrid) {
-    //     const pointsLoc = marchData.assignPointsLocation(...dataObj.size);
-    //     const pointsArray = new Float32Array(marchData.memory.buffer, pointsLoc, dataObj.volume*3);
-    //     pointsArray.set(Float32Array.from(dataObj.points));
-    // }
+    if (dataObj.structuredGrid) {
+        dataObj.marchData.buffers.finePoints = new Buffer(dataObj.marchData, Float32Array, fineDataBlockCount*dataObj.blockVol*3);
+        dataObj.marchData.buffers.finePoints.allocate();
+    }
 }
 
 var generateMeshWasm = function(dataObj, meshObj, threshold) {
@@ -158,6 +158,7 @@ var generateMeshWasm = function(dataObj, meshObj, threshold) {
     // get the length of the vertices and indices to estimate whether the memory
     const vertsNumber = funcs.generateMesh(
         dataObj.marchData.buffers.data.location,
+        dataObj.marchData.buffers?.points?.location,
         ...dataObj.size,
         ...dataObj.cellSize,
         threshold, 
@@ -192,7 +193,7 @@ function updateActiveBlocks(dataObj) {
     // console.log(dataObj.marchData.buffers.activeBlocks.read());
 }
 
-function updateMarchFineData(dataObj, addBlockIDs, removeBlockIDs, newBlockData) {
+function updateMarchFineData(dataObj, addBlockIDs, removeBlockIDs, newBlockData, newPoints) {
     console.log(addBlockIDs.length, "blocks to home");
     console.log(removeBlockIDs.length, "blocks to remove");
     // console.log(this.emptyLocations.length, "empty locations at start");
@@ -201,6 +202,7 @@ function updateMarchFineData(dataObj, addBlockIDs, removeBlockIDs, newBlockData)
 
     // buffer objects
     var fineData = dataObj.marchData.buffers.fineData; 
+    var finePoints = dataObj.marchData.buffers.finePoints;
     var blockLocations = dataObj.marchData.buffers.blockLocations;
     // array object
     var locationsOccupied = dataObj.marchData.arrays.locationsOccupied;
@@ -218,8 +220,14 @@ function updateMarchFineData(dataObj, addBlockIDs, removeBlockIDs, newBlockData)
             // can replace this old block with a new one
             // overwrite with new block
             for (let j = 0; j < dataObj.blockVol; j++) {
+
                 const blockData = newBlockData.slice(i*dataObj.blockVol, (i+1)*dataObj.blockVol);
                 fineData.set(blockData, oldBlockLoc*dataObj.blockVol);
+
+                if (dataObj.structuredGrid) {
+                    const blockPoints = newPoints.slice(3*i*dataObj.blockVol, 3*(i+1)*dataObj.blockVol);
+                    finePoints.set(blockPoints, 3*oldBlockLoc*dataObj.blockVol);
+                }
             }
             blockLocations.set([oldBlockLoc], addBlockIDs[i]);
             added++;
@@ -249,6 +257,11 @@ function updateMarchFineData(dataObj, addBlockIDs, removeBlockIDs, newBlockData)
             const blockData = newBlockData.slice(i*dataObj.blockVol, (i+1)*dataObj.blockVol);
             fineData.set(blockData, newBlockLoc*dataObj.blockVol);
 
+            if (dataObj.structuredGrid) {
+                const blockPoints = newPoints.slice(3*i*dataObj.blockVol, 3*(i+1)*dataObj.blockVol);
+                finePoints.set(blockPoints, 3*newBlockLoc*dataObj.blockVol);
+            }
+
             blockLocations.set([newBlockLoc], addBlockIDs[i]);
             locationsOccupied[newBlockLoc] = 1;
             added++;
@@ -274,6 +287,7 @@ function generateMeshFineWASM (dataObj, meshObj, threshold) {
     // get the length of the vertices and indices to estimate wether the memory
     const vertsNumber = funcs.generateMeshFine(
         dataObj.marchData.buffers.fineData.location,
+        dataObj.marchData.buffers?.finePoints?.location,
         ...dataObj.blocksSize,
         ...dataObj.size,
         dataObj.marchData.buffers.activeBlocks.location,

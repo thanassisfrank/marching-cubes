@@ -9,6 +9,11 @@
             "y": 256,
             "z": 256
         },
+        "blocksSize": {
+            "x": 32,
+            "y": 64,
+            "z": 64
+        },
         "cellSize": {
             "x": 1,
             "y": 1,
@@ -27,6 +32,11 @@
             "y": 512,
             "z": 512
         },
+        "blocksSize": {
+            "x": 128,
+            "y": 128,
+            "z": 128
+        },
         "cellSize": {
             "x": 1,
             "y": 1,
@@ -39,11 +49,16 @@
         "name": "silicium",
         "path": "data/silicium_98x34x34_uint8.raw",
         "type": "raw",
-        "complexAvailable": true,
+        "complexAvailable": false,
         "size": {
             "x": 34,
             "y": 34,
             "z": 98
+        },
+        "blocksSize": {
+            "x": 8,
+            "y": 8,
+            "z": 24
         },
         "cellSize": {
             "x": 1,
@@ -62,6 +77,11 @@
             "y": 16,
             "z": 16
         },
+        "blocksSize": {
+            "x": 4,
+            "y": 4,
+            "z": 4
+        },
         "cellSize": {
             "x": 1,
             "y": 1,
@@ -79,6 +99,11 @@
             "y": 16,
             "z": 16
         },
+        "blocksSize": {
+            "x": 4,
+            "y": 4,
+            "z": 4
+        },
         "cellSize": {
             "x": 1,
             "y": 1,
@@ -91,10 +116,16 @@
         "name": "Multicomb_0",
         "path": "data/multicomb_0.vts",
         "type": "structuredGrid",
+        "origin": [1, 1, 1],
         "size": {
             "x": 15,
             "y": 32,
             "z": 24
+        },
+        "blocksSize": {
+            "x": 3,
+            "y": 8,
+            "z": 6
         },
         "dataType": "float32"
     },
@@ -102,21 +133,16 @@
         "name": "Multicomb",
         "path": "data/multicomb_simple.vts",
         "type": "structuredGrid",
+        "origin": [1, 1, 1],
         "size": {
             "x": 15,
             "y": 32,
             "z": 24
         },
-        "dataType": "float32"
-    },
-    "bluntfin_simple_comb": {
-        "name": "Blunt fin",
-        "path": "data/bluntfin_simple_comb.vts",
-        "type": "structuredGrid",
-        "size": {
-            "x": 31,
-            "y": 31,
-            "z": 39
+        "blocksSize": {
+            "x": 3,
+            "y": 8,
+            "z": 6
         },
         "dataType": "float32"
     },
@@ -129,6 +155,11 @@
             "y": 256,
             "z": 256
         },
+        "blocksSize": {
+            "x": 64,
+            "y": 64,
+            "z": 64
+        },
         "dataType": "float32"
     },
     "heptane": {
@@ -139,6 +170,11 @@
             "x": 302,
             "y": 302,
             "z": 302
+        },
+        "blocksSize": {
+            "x": 75,
+            "y": 75,
+            "z": 75
         },
         "dataType": "uint8"
     },
@@ -153,6 +189,11 @@
             "y": 512,
             "z": 512
         },
+        "blocksSize": {
+            "x": 60,
+            "y": 128,
+            "z": 128
+        },
         "cellSize": {
             "x": 1,
             "y": 1,
@@ -160,38 +201,47 @@
         },
         "dataType": "int16"
     },
-    "multiTest": {
-        "name": "multi test",
-        "path": "data/multiTest",
+    "bluntfin": {
+        "name": "Blunt fin",
+        "path": "data/bluntfin/",
         "complexAvailable": true,
         "type": "structuredGrid",
-        "originalFile": "multiTest.vts",
-        "pieces": {
-            "0": {
+        "originalFiles": ["bluntfin_0.vts", "bluntfin_1.vts"],
+        "origin": [1, 1, 1],
+        "pieces": [
+            {
+                "fileName": "bluntfin_0",
                 "size": {
-                    "x": 10,
-                    "y": 10,
-                    "z": 15
+                    "x": 32,
+                    "y": 32,
+                    "z": 40
+                },
+                "blocksSize": {
+                    "x": 8,
+                    "y": 8,
+                    "z": 10
                 }
             },
-            "1": {
+            {
+                "fileName": "bluntfin_1",
                 "size": {
-                    "x": 10,
-                    "y": 10,
-                    "z": 25
+                    "x": 32,
+                    "y": 32,
+                    "z": 40
+                },
+                "blocksSize": {
+                    "x": 8,
+                    "y": 8,
+                    "z": 10
                 }
             }
-        },
+        ],
         "data": {
-            "density": {
+            "Density": {
                 "name": "Density",
+                "limits": [0.19259999692440033, 4.977499961853027],
                 "dataType": "float32",
                 "components": 1
-            },
-            "velocity": {
-                "name": "Vel",
-                "dataType": "uint8",
-                "components": 3
             }
         }
     }

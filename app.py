@@ -1,5 +1,6 @@
 # app.py 
 # the http server written in python
+from fileinput import filename
 import sys
 import json
 import socketserver
@@ -105,10 +106,10 @@ class requestHandler(BaseHTTPRequestHandler):
                         # a version of the whole dataset is required
                         self.handleWholeDataRequest(request)
                         return
-                    elif request["mode"] == "threshold":
-                        # just data around the threshold
-                        self.handleThresholdDataRequest(request)
-                        return
+                    # elif request["mode"] == "threshold":
+                    #     # just data around the threshold
+                    #     self.handleThresholdDataRequest(request)
+                    #     return
                     elif request["mode"] == "blocks":
                         # just data around the threshold
                         self.handleBlocksDataRequest(request)
@@ -120,23 +121,53 @@ class requestHandler(BaseHTTPRequestHandler):
     # method called when the client sends a POST request for the whole data at a
     # particular resolution (cellScale)
     def handleWholeDataRequest(self, request):
-        # create a response object
-        response = {}
         # get dataset info
         data_info = datasets[request["name"]]
-        # load the dataset TODO: load chunks at a time
-        file = open(static_path + data_info["path"], "rb")
-        # if request["cellScale"] == 1:
-        #     self.send_response(200)
-        #     self.send_header("content-type", "applcation/octet-stream")
-        #     # if the cell scale is 1, the whole data is needed
-        #     self.wfile.write(file.read())
-        #     file.close()
-        if True:
-            # else need to send only requested bytes
 
-            # create alias vars to shorten code
+        stride = 1
+        # check if its point data
+        if ("fileName" in request) and ("points" in request) and request["points"]:
+            # if it is, set stride = 3
+            stride = 3
+            file_name = request["fileName"]
+
+            for piece in data_info["pieces"]:
+                if piece["fileName"] == request["fileName"]:
+                    size = piece["size"]
+            
+            data_type = np.float32  # points always float for now ================================
+
+            path = static_path + data_info["path"] + file_name + "_positions.raw"
+        # check for filename and data
+        elif ("fileName" in request) and ("data" in request):
+            # is from a sg dataset
+            file_name = request["fileName"]
+            data_name = request["data"]
+            stride = data_info["data"][data_name]["components"]
+
+            for piece in data_info["pieces"]:
+                if piece["fileName"] == request["fileName"]:
+                    size = piece["size"]
+
+            data_type = np_data_formats[data_info["data"][data_name]["dataType"]]
+            path = static_path + data_info["path"] + file_name + "_" + data_name + ".raw"
+        else:
+            path = static_path + data_info["path"]
             size = data_info["size"]
+            data_type = np_data_formats[data_info["dataType"]]
+
+        print(path)
+        # load the dataset TODO: load chunks at a time
+        file = open(path, "rb")
+        if request["cellScale"] == 1:
+            self.send_response(200)
+            self.send_header("content-type", "applcation/octet-stream")
+            self.end_headers()
+            # if the cell scale is 1, the whole data is needed
+            self.wfile.write(file.read())
+            file.close()
+        else:
+            # else need to send only requested bytes
             cs = request["cellScale"]
             
             # get size of reduced data
@@ -145,10 +176,10 @@ class requestHandler(BaseHTTPRequestHandler):
                 "y": int(np.floor(size["y"]/request["cellScale"])),
                 "z": int(np.floor(size["z"]/request["cellScale"]))
             }
-            vol_red = int(size_red["x"]*size_red["y"]*size_red["z"])
+            vol_red = int(size_red["x"]*size_red["y"]*size_red["z"]*stride)
 
             # load bytes into am array of the correct type
-            data_type = np_data_formats[data_info["dataType"]]
+            
             data = np.frombuffer(file.read(), dtype=data_type)
             output = np.empty(vol_red, dtype=data_type)
 
@@ -165,8 +196,9 @@ class requestHandler(BaseHTTPRequestHandler):
             for i in range(size_red["x"]):
                 for j in range(size_red["y"]):
                     for k in range(size_red["z"]):
-                        val = data[i*cs * size["y"] * size["z"] + j*cs * size["z"] + k*cs]
-                        output[int(i * size_red["y"] * size_red["z"] + j * size_red["z"] + k)] = val
+                        for x in range(stride):
+                            val = data[(i*cs * size["y"] * size["z"] + j*cs * size["z"] + k*cs)*stride + x]
+                            output[int(i * size_red["y"] * size_red["z"] + j * size_red["z"] + k)*stride + x] = val
             
             self.send_response(200)
             self.send_header("content-type", "applcation/octet-stream")
@@ -182,7 +214,6 @@ class requestHandler(BaseHTTPRequestHandler):
         path = static_path + data_info["path"].split(".")[0] + "_limits.raw"
         limits_file = open(path, "rb")
 
-        data_type = ""
 
         # load bytes into am array of the correct type
         data_type = np_data_formats[data_info["dataType"]]
@@ -249,20 +280,29 @@ class requestHandler(BaseHTTPRequestHandler):
     def handleBlocksDataRequest(self, request):
         data_info = datasets[request["name"]]
         # load the dataset TODO: load chunks at a time
-        # data_file = open("data/" + data_info["path"], "rb")
-        # path = "data/" + data_info["path"].split(".")[0] + "_limits.raw"
-
-        data_file = open(static_path + data_info["path"].split(".")[0] + "_blocks.raw", "rb")
-
-        data_type = None
-
-        # load bytes into am array of the correct type
-        data_type = np_data_formats[data_info["dataType"]]
-        # if data_info["dataType"] == "float32":
-        #     data_type = np.float32
-        # elif data_info["dataType"] == "uint8":
-        #     data_type = np.uint8
         
+        stride = 1
+        # check if its point data
+        if ("fileName" in request) and ("points" in request) and request["points"]:
+            # if it is, set stride = 3
+            stride = 3
+            file_name = request["fileName"]
+            path = static_path + data_info["path"] + file_name + "_positions_blocks.raw"
+            data_type = np.float32
+        # check for filename and data
+        elif ("fileName" in request) and ("data" in request):
+            # is from a sg dataset
+            file_name = request["fileName"]
+            data_name = request["data"]
+            stride = data_info["data"][data_name]["components"]
+            path = static_path + data_info["path"] + file_name + "_" + data_name + "_blocks.raw"
+            data_type = np_data_formats[data_info["data"][data_name]["dataType"]]
+        else:
+            path = static_path + data_info["path"].split(".")[0] + "_blocks.raw"
+            data_type = np_data_formats[data_info["dataType"]]
+
+
+        data_file = open(path, "rb")
 
         data = np.frombuffer(data_file.read(), dtype=data_type)
 
@@ -273,21 +313,15 @@ class requestHandler(BaseHTTPRequestHandler):
         }
         block_vol = blockSize["x"] * blockSize["y"] * blockSize["z"]
 
-        blocks = {
-            "x": data_info["size"]["x"]//blockSize["x"],
-            "y": data_info["size"]["y"]//blockSize["y"],
-            "z": data_info["size"]["z"]//blockSize["z"]
-        }
-
         # active_ids = []
-        fine_data = np.empty(len(request["blocks"])*blockSize["x"]*blockSize["y"]*blockSize["z"], dtype=data_type)
+        fine_data = np.empty(len(request["blocks"])*blockSize["x"]*blockSize["y"]*blockSize["z"]*stride, dtype=data_type)
 
         for i in range(len(request["blocks"])):
             id = request["blocks"][i]
             if type(id) is not int:
                 print(type(id))
                 continue
-            fine_data[i*block_vol:(i+1)*block_vol] = data[id*block_vol:(id+1)*block_vol]
+            fine_data[i*block_vol*stride:(i+1)*block_vol*stride] = data[id*block_vol*stride:(id+1)*block_vol*stride]
 
 
         self.send_response(200)
