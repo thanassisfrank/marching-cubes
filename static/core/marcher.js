@@ -126,6 +126,7 @@ var marcherManager = {
                 this.blockLocations.fill(-1);
             }
         }
+        
         this.march = async function(threshold) {
             if (this.data.initialised && !this.busy){
                 this.busy = true;
@@ -434,6 +435,26 @@ var marcherManager = {
                 meshes.push(this.mesh);
             }
             renderView(gl, projMat, modelMat, box, meshes, mode != renderModes.ISO_SURFACE);
+        }
+        this.getMeshes = function() {
+            var out = []
+            if (this.multiBlock) {
+                for (let i = 0; i < this.pieces.length; i++) {
+                    out.push(this.pieces[i].mesh);
+                }
+            } else {
+                out.push(this.mesh);
+            }
+            return out;
+        }
+        this.setMarchIntoMesh = function(bool) {
+            if (this.multiBlock) {
+                for (let i = 0; i < this.pieces.length; i++) {
+                    this.pieces[i].mesh.forceCPUSide = bool;
+                }
+            } else {
+                this.mesh.forceCPUSide = bool;
+            }
         }
 
         this.delete = function() {

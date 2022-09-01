@@ -614,7 +614,7 @@ var dataManager = {
         
         this.logBlockDensity = function(n) {
             const density = this.getBlockDensity(n);
-            console.log(density);
+            // console.log(density);
             // find the max to scale by
             var maxVal = 0;
             for (let i = 0; i < density.length; i++) {

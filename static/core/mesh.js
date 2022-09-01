@@ -37,6 +37,8 @@ var meshManager = {
         this.indicesNum = 0;
         this.vertsNum = 0;
         this.users = 0;
+        this.forceCPUSide = false;
+        this.marchNormals = false
 
         this.clear = function() {
             this.verts = [];

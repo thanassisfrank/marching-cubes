@@ -154,8 +154,6 @@ def create_raw_file(data, name):
         file.write(data)
 
 
-
-
 def process_raw_file(data_info):
     size = data_info["size"]
     data_type_str = data_info["dataType"]

@@ -305,6 +305,7 @@ function generateMeshFineWASM (dataObj, meshObj, threshold) {
     var indBuffer  = new Buffer(dataObj.marchData, Uint32Array, indicesNumber)
     vertBuffer.setLocation(funcs.getVertsLocation());
     indBuffer.setLocation(funcs.getIndicesLocation());
+
     meshObj.verts = vertBuffer.read();
     meshObj.indices = indBuffer.read();
     meshObj.vertNum = vertsNumber;

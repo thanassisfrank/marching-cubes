@@ -207,6 +207,7 @@
         "complexAvailable": true,
         "type": "structuredGrid",
         "originalFiles": ["bluntfin_0.vts", "bluntfin_1.vts"],
+        
         "origin": [1, 1, 1],
         "pieces": [
             {

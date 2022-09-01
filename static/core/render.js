@@ -64,6 +64,9 @@ function createBuffers(...args) {
 }
 
 function buffersUpdateNeeded(...args) {
+    if (!module) {
+        return false;
+    }
     return !(module == "gpu" && marchModule == "gpu")
 }
 
