@@ -26,8 +26,6 @@ const blockSize = [4, 4, 4]
 
 var dataManager = {
     datas: {},
-    // keeps a track of the names of loaded datasets
-    loaded: new Set(),
     // directory of data objects corresponding to each dataset
     directory: {},
     // keep the config set too
@@ -59,7 +57,6 @@ var dataManager = {
             this.configSet[id].id = id;
             this.directory[id] = null;
         }
-        console.log(this.directory);
     },
     getDataObj: async function(configId) {
         // returns already created data object if it exists
@@ -89,7 +86,6 @@ var dataManager = {
         var newData = new this.Data(id);
         console.log(config.name);
         newData.dataName = config.name;
-        this.loaded.add(config.name);
 
         if (config.complexAvailable) {
             // handle complex data setup
@@ -410,7 +406,7 @@ var dataManager = {
                 const limitsBuffer = await limitsResponse.arrayBuffer();
                 this.blockLimits = new DATA_TYPES[config.dataType](limitsBuffer)
 
-                this.logBlockDensity(32);
+                // this.logBlockDensity(32);
 
                 this.limits = config.limits;
                 this.initialise(config, scale);
@@ -612,6 +608,7 @@ var dataManager = {
             return volume(blockSize)*3*4; // assume positions are float32 for now
         }
         
+
         this.logBlockDensity = function(n) {
             const density = this.getBlockDensity(n);
             // console.log(density);
@@ -644,7 +641,6 @@ var dataManager = {
                 this.removeUser(subData);
             }
         }
-        this.loaded.delete(data.dataName);
         for (let id in this.directory) {
             if (this.directory[id] == data) {
                 this.directory[id] = null;

@@ -23,7 +23,7 @@ var viewManager = {
     moreViewsAllowed: function() {
         return Object.keys(this.views).length < this.maxViews;
     },
-    createView: function(config) {    
+    createView: async function(config) {    
         // some linking is working
     
         //check to see if there is already the max amount of views
@@ -36,7 +36,7 @@ var viewManager = {
         var camera = config.camera;
         var data = config.data;
 
-        var marcher = marcherManager.create(data); // FOR NOW CREATE NEW FOR EACH VIEW
+        var marcher = await marcherManager.create(data); // FOR NOW CREATE NEW FOR EACH VIEW
         
 
         const modelMat = mat4.create();
@@ -184,7 +184,7 @@ var viewManager = {
                 // transfer the points from the data object to the mesh
                 this.marcher.transferPointsToMesh();
             } else if (this.renderMode == renderModes.ISO_SURFACE ||this.renderMode == renderModes.ISO_POINTS) {
-                this.updateThreshold(this.threshold);
+                this.updateThreshold(this.threshold, true);
             }            
         }     
         this.updateThreshold = async function(val, fine) {
@@ -192,7 +192,7 @@ var viewManager = {
             // only update the mesh if marching is needed
             if (this.renderMode == renderModes.DATA_POINTS) return;
             
-            if (fine) {
+            if (fine && this.marcher.complex) {
                 console.log("fine")
                 this.marcher.marchFine(this.threshold);
             } else {

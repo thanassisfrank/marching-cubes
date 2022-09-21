@@ -1,20 +1,181 @@
 # app.py 
 # the http server written in python
 from fileinput import filename
+import os
 import sys
 import json
+import threading
 import socketserver
 import socket
-import _thread
 import numpy as np
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import *
+import time
 
 static_path = "static/"
+file_types = None
+datasets = None
 
-port = 8080
+file_manager = None
+
+# deals with loading and unloading files, managing the total memory available
+# opening/closing files will be dine through this
+class loadedFileManager:
+
+    access_modes = ["r", "rb"]
+
+    def __init__(self, allowed_bytes):
+        # a directory of every file loaded by path and mode
+        self.files = {}
+        # a queue of files in order to be removed
+        # last item is first to be removed
+        # only contains files that are currently cached
+        # an LRU scheme is used
+        self.file_queue = []
+        self.queue_lock = threading.Lock()
+
+        # total allowed storage space
+        self.allowed_bytes = allowed_bytes
+        self.loaded_bytes = 0
+        self.loaded_bytes_lock = threading.Lock()
+
+    
+    # creates a new blank entry for a file
+    def createEntry(self):
+        # the entry kept for each file 
+        # file:           cached contents of the file
+        # users:          current amount of users reading from the cached file
+        # being_modified: a lock which indicates if user count if being modified or file loaded
+        # in_use:         lock to indicate if file is being read from, released when users = 0
+        return {
+            "file": None,
+            "users": 0,
+            "bytes_size": 0,
+            "being_modified": threading.Lock(),
+            "in_use": threading.Lock()
+        }
+
+
+    def __getQueueKey(self, path, mode):
+        return path + " " + mode
+
+
+    def __exists(self, path, mode):
+        return path in self.files and mode in self.files[path]
+
+
+    def __addUser(self, path, mode):
+        if self.files[path][mode]["users"] == 0:
+            self.files[path][mode]["in_use"].acquire()
+        self.files[path][mode]["users"] += 1
+    
+
+    def __removeUser(self, path, mode):
+        self.files[path][mode]["users"] -= 1
+        if self.files[path][mode]["users"] == 0:
+            self.files[path][mode]["in_use"].release()
+
+
+    def __loadFile(self, path, mode):
+        # get the size of the file to load
+        try:
+            self.files[path][mode]["bytes_size"] = os.path.getsize(path)
+        except:
+            print("path '" + path + "' not found")
+            return None
+        # check if it fits in total space
+        if self.files[path][mode]["bytes_size"] > self.allowed_bytes:
+            print("file too large to load")
+            return None
+        # unload files until enough space has been freed
+        self.loaded_bytes_lock.acquire()
+        self.queue_lock.acquire()
+
+        while True:
+            if self.files[path][mode]["bytes_size"] + self.loaded_bytes < self.allowed_bytes:
+                # enough free space, load the file
+                file = open(path, mode)
+                newFile = file.read()
+                file.close()
+                # add to the currently loaded bytes total
+                self.loaded_bytes += self.files[path][mode]["bytes_size"]
+                break
+            # pop the last file from the file queue
+            try:
+                unload_path, unload_mode = self.file_queue.pop().split(" ")
+                self.__unloadFile(unload_path, unload_mode)
+                self.loaded_bytes -= self.files[unload_path][unload_mode]["bytes_size"]
+            except:
+                # likely, file queue is empty
+                print("error freeing file space")
+                newFile = None
+                break
+
+        if newFile is not None:
+            # add a new entry to the queue
+            self.file_queue.insert(0, self.__getQueueKey(path, mode))
+        self.loaded_bytes_lock.release()
+        self.queue_lock.release()
+
+        return newFile
+
+        
+
+    def __unloadFile(self, path, mode):
+        if not self.__exists(path, mode):
+            return None
+        
+        entry = self.files[path][mode]
+        # wait for the file to not be in use
+        entry["in_use"].acquire()
+        # clear cached file contents
+        entry["file"] = None
+        entry["in_use"].release()
+
+
+    def getFile(self, path, mode):
+        # check if entry exists
+        if path not in self.files:
+            self.files[path] = {}
+        # check if required mode is there
+        if mode not in self.files[path]:
+            self.files[path][mode] = self.createEntry()
+
+        # add another user to this file
+        self.files[path][mode]["being_modified"].acquire()
+        
+        if self.files[path][mode]["file"] is None:
+            # file not loaded, load
+            newFile = self.__loadFile(path, mode)
+            if newFile is None:
+                print("error loading file " + path + " " + mode)
+                # delete the entry for this path + mode
+                del self.files[path][mode]
+            else:
+                # cache the result
+                self.__addUser(path, mode)
+                self.files[path][mode]["file"] = newFile
+                self.files[path][mode]["being_modified"].release()
+            return newFile
+        else:
+            # file is already loaded
+            self.__addUser(path, mode)
+            self.files[path][mode]["being_modified"].release()
+            return self.files[path][mode]["file"]
+
+
+    # called when the file is no longer in use by a thread
+    def releaseFile(self, path, mode):
+        # check if file is managed
+        if path not in self.files or mode not in self.files[path]:
+            print("file not stored")
+            return None
+
+        self.files[path][mode]["being_modified"].acquire()
+        self.__removeUser(path, mode)
+        self.files[path][mode]["being_modified"].release()
+
+
 # files = json.loads(open("files.json", "r").read())
-file_types = json.loads(open("fileTypes.json", "r").read())
-datasets = json.loads(open(static_path + "data/datasets.json", "r").read())
 struct_data_formats = {
     "float32": "f",
     "uint8": "c",
@@ -25,6 +186,11 @@ np_data_formats = {
     "uint8": np.uint8,
     "float32": np.float32,
     "int16": np.int16
+}
+
+
+files_loaded = {
+    
 }
 
 
@@ -40,12 +206,6 @@ def get_pos(i, size):
     )
 
 
-def get_file_desc(files, name):
-    for file in files:
-        if file["path"] == name:
-            return file
-    else:
-        return {}
 
 
 # this is a simple http request handler class using the http.server interface
@@ -55,7 +215,6 @@ class requestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         # file_name = self.path[1:]
         try:
-            # file_desc = get_file_desc(files, file_name)
             # get the extension from the file
             extension = self.path.split(".")[1]
             file_desc = file_types[extension]
@@ -99,7 +258,9 @@ class requestHandler(BaseHTTPRequestHandler):
             content_length = int(self.headers['Content-Length'])
             if content_length > 0:
                 # reads POST body to a dict
+                start_time = time.time()
                 request = json.loads(self.rfile.read(content_length))
+                print("json took " + "%.3f" % (time.time()-start_time) + "s")
                 # check if the name given corresponds to a dataset
                 if request["name"] in datasets:
                     if request["mode"] == "whole":
@@ -178,7 +339,7 @@ class requestHandler(BaseHTTPRequestHandler):
             }
             vol_red = int(size_red["x"]*size_red["y"]*size_red["z"]*stride)
 
-            # load bytes into am array of the correct type
+            # load bytes into an array of the correct type
             
             data = np.frombuffer(file.read(), dtype=data_type)
             output = np.empty(vol_red, dtype=data_type)
@@ -278,6 +439,7 @@ class requestHandler(BaseHTTPRequestHandler):
 
 
     def handleBlocksDataRequest(self, request):
+        start_time = time.time()
         data_info = datasets[request["name"]]
         # load the dataset TODO: load chunks at a time
         
@@ -302,9 +464,10 @@ class requestHandler(BaseHTTPRequestHandler):
             data_type = np_data_formats[data_info["dataType"]]
 
 
-        data_file = open(path, "rb")
+        # data_file = open(path, "rb")
+        data_file = file_manager.getFile(path, "rb")
 
-        data = np.frombuffer(data_file.read(), dtype=data_type)
+        data = np.frombuffer(data_file, dtype=data_type)
 
         blockSize = {
             "x": 4,
@@ -316,6 +479,7 @@ class requestHandler(BaseHTTPRequestHandler):
         # active_ids = []
         fine_data = np.empty(len(request["blocks"])*blockSize["x"]*blockSize["y"]*blockSize["z"]*stride, dtype=data_type)
 
+        
         for i in range(len(request["blocks"])):
             id = request["blocks"][i]
             if type(id) is not int:
@@ -323,7 +487,8 @@ class requestHandler(BaseHTTPRequestHandler):
                 continue
             fine_data[i*block_vol*stride:(i+1)*block_vol*stride] = data[id*block_vol*stride:(id+1)*block_vol*stride]
 
-
+        
+        print("for", len(request["blocks"]), "blocks")
         self.send_response(200)
         self.send_header("content-type", "applcation/octet-stream")
         self.end_headers()
@@ -331,12 +496,21 @@ class requestHandler(BaseHTTPRequestHandler):
         #print(fine_data[:40])
         self.wfile.write(fine_data.data)
 
-        data_file.close()
+        # data_file.close()
+        file_manager.releaseFile(path, "rb")
+        print("took " + "%.3f" % (time.time()-start_time) + "s")
 
 def main():
+    global file_types, datasets, file_manager
+    file_types = json.loads(open("fileTypes.json", "r").read())
+    datasets = json.loads(open(static_path + "data/datasets.json", "r").read())
+    # create manager for all the files that will be loaded
+    file_manager = loadedFileManager(1e9)
     # create a server object and tell it to listen on current local ip at port 
     # uses the request handler class defined above
-    server = HTTPServer(("localhost", port), requestHandler)
+    port = 8080
+    # server = socketserver.ThreadingTCPServer(("localhost", port), requestHandler)
+    server = ThreadingHTTPServer(("localhost", port), requestHandler)
     try:
         # print where the server is listening on
         print("server listening on: %s:%s" % (server.server_address[0], server.server_port))
@@ -417,3 +591,22 @@ if __name__ == "__main__":
     #     s.close()
     #     print("server closed")
     #     sys.exit()
+
+
+
+# File management:
+    # file.read() will load data into memory
+    # read function is the way data is accessed from class
+        # if file is already loaded
+            # return the contents
+        # else have to load file
+            # throw error if the file is too big
+            # if there is enough free space for it
+                # load and return the contents
+            # else will have to remove others
+                # unload enough to make it fit
+                # load and return contents
+    
+    # making space for new files
+        # go through the queue of the most recently accessed files
+        # 

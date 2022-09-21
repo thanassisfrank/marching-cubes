@@ -19,6 +19,31 @@ data_types = {
     "float32": np.float32,
     "int16": np.int16
 }
+#define VTK_VOID            0
+#define VTK_BIT             1
+#define VTK_CHAR            2
+#define VTK_SIGNED_CHAR    15
+#define VTK_UNSIGNED_CHAR   3
+#define VTK_SHORT           4
+#define VTK_UNSIGNED_SHORT  5
+#define VTK_INT             6
+#define VTK_UNSIGNED_INT    7
+#define VTK_LONG            8
+#define VTK_UNSIGNED_LONG   9
+#define VTK_FLOAT          10
+#define VTK_DOUBLE         11
+#define VTK_ID_TYPE        12
+#define VTK_STRING         13
+#define VTK_OPAQUE         14
+#define VTK_LONG_LONG          16
+#define VTK_UNSIGNED_LONG_LONG 17
+#define VTK___INT64            18
+#define VTK_UNSIGNED___INT64   19
+vtk_to_str = {
+    10: "float32",
+    2: "uint8",
+    4: "int16"
+}
 
 blockSize = {
     "x": 4,
@@ -35,13 +60,9 @@ def getIndex(x, y, z, size):
 
 # size is the dimensions of the dataset, blocksSize in blocks
 # stride is number of commponents per element
-def create_blocks_file(data, size, stride, name):
+def create_blocks_file(data, size, blocks, stride, name):
     # get size in blocks
-    blocks = {
-        "x": size["x"]//blockSize["x"],
-        "y": size["y"]//blockSize["y"],
-        "z": size["z"]//blockSize["z"]
-    }
+    
 
     # create output buffer
     output = np.empty(
@@ -63,7 +84,12 @@ def create_blocks_file(data, size, stride, name):
                             i = i_l + i_b * blockSize["x"]
                             j = j_l + j_b * blockSize["y"]
                             k = k_l + k_b * blockSize["z"]
-                            index = getIndex(i, j, k, size)
+                            index = getIndex(
+                                min(i, size["x"] - 1), 
+                                min(j, size["y"] - 1), 
+                                min(k, size["z"] - 1),
+                                size
+                            )
 
                             for x in range(stride):
                                 output[stride*out_ind + x] = data[stride*index + x]
@@ -155,10 +181,14 @@ def create_raw_file(data, name):
 
 
 def process_raw_file(data_info):
-    size = data_info["size"]
-    data_type_str = data_info["dataType"]
-    data_type = data_types[data_type_str]
-    path, ext = data_info["path"].split(".")
+    try:
+        size = data_info["size"]
+        data_type_str = data_info["dataType"]
+        data_type = data_types[data_type_str]
+        path, ext = data_info["path"].split(".")
+    except KeyError:
+        print("Error: required dataset info not all supplied")
+        return
 
     # load data in buffer
     try:
@@ -169,16 +199,64 @@ def process_raw_file(data_info):
         print("could not find file")
         return
 
-    create_blocks_file(data, size, 1, "static/" + path + "_blocks" + "." + ext)
+    blocks = {
+        "x": int(np.ceil(size["x"]/blockSize["x"])),
+        "y": int(np.ceil(size["y"]/blockSize["y"])),
+        "z": int(np.ceil(size["z"]/blockSize["z"]))
+    }
+
+    data_info["blocksSize"] = blocks
+
+    create_blocks_file(data, size, blocks, 1, "static/" + path + "_blocks" + "." + ext)
     
     create_limits_file(data, size, "static/" + path + "_limits" + "." + ext)
 
+    # update the json file
 
+    # set the origin
+    if "cellSize" in data_info:
+        cell_size = data_info["cellSize"]
+    else:
+        cell_size = [1, 1, 1]
+    data_info["origin"] = [
+        (size["x"]-1)/2*cell_size["x"], 
+        (size["y"]-1)/2*cell_size["y"], 
+        (size["z"]-1)/2*cell_size["z"]
+    ]
+
+    return data_info
+
+
+def getArrayNames(point_data):
+    i = 0
+    names = []
+    while True:
+        try:
+            attribute = point_data.GetAttribute(i)
+            if attribute.GetNumberOfComponents() == 1:
+                names.append(attribute.GetName())
+        except:
+            break
+
+        i += 1
+
+    return names
+    
 def process_structured_grid_file(data_info):
+    # clear the complex data
+    data_info["pieces"] = []
+    data_info["data"] = {}
+
     print(data_info)
 
+    # for now, each file assumed to contain one piece
+    piece_count = len(data_info["originalFiles"])
+    piece_num = 0
+
+    chosen_attr_name = None
     # for each original file containing one block each
     for i in range(len(data_info["originalFiles"])):
+        piece_num = i
         original_path, ext = ("static/" + data_info["path"] + data_info["originalFiles"][i]).split(".")
         reader = vtkXMLStructuredGridReader()
 
@@ -196,31 +274,64 @@ def process_structured_grid_file(data_info):
             "z": size_list[0]
         }
 
+        blocks = {
+            "x": int(np.ceil(size["x"]/blockSize["x"])),
+            "y": int(np.ceil(size["y"]/blockSize["y"])),
+            "z": int(np.ceil(size["z"]/blockSize["z"]))
+        }
+
         positions = np.zeros(data.GetNumberOfPoints()*3, np.float32)
         for j in range(data.GetNumberOfPoints()):
             positions[3*j:3*j + 3] = data.GetPoint(j)
-
+        
+        # create the piece entry in json file
+        data_info["pieces"].append({
+            "fileName": data_info["originalFiles"][i].split(".")[0],
+            "size": size,
+            "blocksSize": blocks
+        })     
 
         # convert the positions
-        create_blocks_file(positions, size, 3, original_path + "_positions_blocks.raw")
+        create_blocks_file(positions, size, blocks, 3, original_path + "_positions_blocks.raw")
         create_raw_file(positions, original_path + "_positions.raw")
+
         # convert point data
-        attribute_name = "Density"
-        point_data = VN.vtk_to_numpy(data.GetPointData().GetArray(attribute_name))
-        create_raw_file(point_data, original_path + "_" + attribute_name + ".raw")
-        create_blocks_file(point_data, size, 1, original_path + "_" + attribute_name + "_blocks.raw")
-        create_limits_file(point_data, size, original_path + "_" + attribute_name + "_limits.raw")
+        # get the names of the attributes
+        array_names = getArrayNames(data.GetPointData())
 
+        # TODO: let attribute be chosen
+        if chosen_attr_name is None:
+            chosen_attr_name = array_names[0]
+            array = data.GetPointData().GetArray(chosen_attr_name)
+            data_info["data"][chosen_attr_name] = {
+                "name": chosen_attr_name,
+                "limits": array.GetRange(),
+                "dataType": vtk_to_str[array.GetDataType()],
+                "components": array.GetNumberOfComponents()
+            }
 
+        point_data = VN.vtk_to_numpy(data.GetPointData().GetArray(chosen_attr_name))
+        # print(data.GetPointData().attributeNames)
+        create_raw_file(point_data, original_path + "_" + chosen_attr_name + ".raw")
+        create_blocks_file(point_data, size, blocks, 1, original_path + "_" + chosen_attr_name + "_blocks.raw")
+        create_limits_file(point_data, size, original_path + "_" + chosen_attr_name + "_limits.raw")
 
+    # update the json file
 
+    # set the origin
+    data_info["origin"] = [0, 0, 0]
+    data_info["complexAvailable"] = True
+
+    return data_info
 
 
 
 
 def main(data_name):
     # load data info from dataset name
-    datasets = json.loads(open("static/data/datasets.json", "r").read())
+    with open("static/data/datasets.json", "r") as file:
+        datasets = json.loads(file.read())
+
     data_info = None
     try:
         data_info = datasets[data_name]
@@ -231,12 +342,18 @@ def main(data_name):
 
     dataset_type = data_info["type"]  # raw/structured grid
 
+    new_data_info = None
+
     if dataset_type == "raw":
-        process_raw_file(data_info)
+        new_data_info = process_raw_file(data_info)
     elif dataset_type == "structuredGrid":
-        process_structured_grid_file(data_info)
+        new_data_info = process_structured_grid_file(data_info)
     else:
         print("unsupported file type")
+    if new_data_info is not None:
+        # write updated entry into config file
+        with open("static/data/datasets.json", "w") as file:
+            file.write(json.dumps(datasets, indent="\t"))
 
 
 if __name__ == "__main__":

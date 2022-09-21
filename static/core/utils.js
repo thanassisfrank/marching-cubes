@@ -193,8 +193,6 @@ export var getRangeDeltas = (range1, range2) => {
     return {add: add, remove: remove}; 
 }
 
-console.log(getRangeDeltas([Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY], [1, 5]));
-
 const child = {
     LEFT: 0, 
     RIGHT: 1
@@ -763,6 +761,8 @@ export function IntervalTree() {
             
     }
 }
+
+export function SimpleList() {}
 
 // class for keeping a track of times (for benchmarking)
 function Timer() {

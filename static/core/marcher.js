@@ -19,10 +19,11 @@ var marcherManager = {
     // used for fine data
     storageBudget: 268435456, // 256 MB
     marchers: {},
-    create: function(data) {
+    create: async function(data) {
         const id = newId(this.marchers);
         var newMarcher = new this.Marcher(id, data);
         this.marchers[id] = newMarcher;
+        await newMarcher.init(data);
         return newMarcher;
     },
     addUser: function(marcher) {
@@ -51,6 +52,7 @@ var marcherManager = {
         // stores a reference to an instance of data object
         this.data = data;
         this.structuredGrid = data.structuredGrid;
+        this.complex = data.complex;
         this.size = data.size;
         this.fullSize = data.fullSize;
         // flag for if the marcher is for a multiblock dataset and so is also multiblock
@@ -67,7 +69,7 @@ var marcherManager = {
         // flag to tell if marching is currently going on
         this.busy = false;
 
-        this.setupComplete;
+        this.setupComplete = false;
 
         // does marching cubes using the connected dataset
         // a whole data pass will use the whole data/whole data buffers from the dataObj
@@ -78,7 +80,7 @@ var marcherManager = {
             if (data.multiBlock) {
                 this.multiBlock = true;
                 for (let i = 0; i < data.pieces.length; i++) {
-                    this.pieces.push(marcherManager.create(data.pieces[i]));
+                    this.pieces.push(await marcherManager.create(data.pieces[i]));
                     marcherManager.addUser(this.pieces[i]);
                 }
             } else {
@@ -125,10 +127,11 @@ var marcherManager = {
                 this.blockLocations = new Int32Array(volume(data.blocksSize));
                 this.blockLocations.fill(-1);
             }
+            this.setupComplete = true;
         }
         
         this.march = async function(threshold) {
-            if (this.data.initialised && !this.busy){
+            if (this.data.initialised && !this.busy && this.setupComplete){
                 this.busy = true;
                 if (this.multiBlock) {
                     for (let i = 0; i < this.pieces.length; i++) {
@@ -157,9 +160,8 @@ var marcherManager = {
         }
         // a fine marching pass will use the fine data that it manages
         this.marchFine = async function(threshold) {
-            console.log(this.setupComplete);
-            await this.setupComplete;
-            if (this.data.initialised && !this.busy){
+            console.log(this.setupComplete, this.data.initialised, this.busy);
+            if (this.data.initialised && !this.busy && this.setupComplete){
                 if (this.data.complex) {
                     this.busy = true;
                     if (this.multiBlock) {
@@ -169,7 +171,7 @@ var marcherManager = {
                     } else {
                         // get the block numbers that are active
                         this.activeBlocks = this.data.queryBlocks([threshold, threshold]);
-                        console.log(this.activeBlocks.length);
+                        // console.log(this.activeBlocks.length);
                         // transfer the active blocks # to the march module
                         await updateActiveBlocks(this);
 
@@ -461,15 +463,6 @@ var marcherManager = {
             meshManager.removeUser(this.mesh);
             dataManager.removeUser(this.data);
         };
-
-        // call the init function
-        var that = this;
-        this.setupComplete = new Promise(
-            async function(resolve, reject) {
-                await that.init(data);
-                resolve(true);
-            }
-        );
     }
 }
 

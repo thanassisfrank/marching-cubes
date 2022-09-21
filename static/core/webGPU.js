@@ -1746,21 +1746,22 @@ async function copyMarchTexturesToBuffers(vertTex, normTex, indTex) {
 }
 
 async function copyBuffersToCPUSide(meshObj) {
-    console.log(meshObj);
-    var commandEncoder;
+    var commandEncoder, range;
+
     var marchVertReadBuffer = device.createBuffer({
         size: 3 * meshObj.vertsNum * Float32Array.BYTES_PER_ELEMENT,
         usage:  GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
     }); 
-
     commandEncoder = await device.createCommandEncoder();
     commandEncoder.copyBufferToBuffer(meshObj.buffers.vertex, 0, marchVertReadBuffer, 0, 3 * meshObj.vertsNum * 4);
     device.queue.submit([commandEncoder.finish()]) 
     device.queue.onSubmittedWorkDone();
 
     await marchVertReadBuffer.mapAsync(GPUMapMode.READ);
-    // do a linear search and create list of all locations not occupied
-    meshObj.verts = new Float32Array(marchVertReadBuffer.getMappedRange());
+
+    range = marchVertReadBuffer.getMappedRange();
+    meshObj.verts = new Float32Array(3 * meshObj.vertsNum * 4);
+    meshObj.verts.set(new Float32Array(range));
     marchVertReadBuffer.unmap();
     marchVertReadBuffer.destroy();
 
@@ -1774,10 +1775,12 @@ async function copyBuffersToCPUSide(meshObj) {
         commandEncoder.copyBufferToBuffer(meshObj.buffers.normal, 0, marchNormalReadBuffer, 0, 3 * meshObj.vertsNum * 4);
         device.queue.submit([commandEncoder.finish()]) 
         device.queue.onSubmittedWorkDone();
-    
+
         await marchNormalReadBuffer.mapAsync(GPUMapMode.READ);
-        // do a linear search and create list of all locations not occupied
-        meshObj.normals = new Float32Array(marchNormalReadBuffer.getMappedRange());
+    
+        range = marchNormalReadBuffer.getMappedRange();
+        meshObj.normals = new Float32Array(3 * meshObj.vertsNum * 4);
+        meshObj.normals.set(new Float32Array(range));
         marchNormalReadBuffer.unmap();
         marchNormalReadBuffer.destroy();
     }
@@ -1793,8 +1796,10 @@ async function copyBuffersToCPUSide(meshObj) {
     device.queue.onSubmittedWorkDone();
 
     await marchIndexReadBuffer.mapAsync(GPUMapMode.READ);
-    // do a linear search and create list of all locations not occupied
-    meshObj.indices = new Uint32Array(marchIndexReadBuffer.getMappedRange());
+
+    range = marchIndexReadBuffer.getMappedRange();
+    meshObj.indices = new Uint32Array(meshObj.indicesNum * 4);
+    meshObj.indices.set(new Uint32Array(range));
     marchIndexReadBuffer.unmap();
     marchIndexReadBuffer.destroy();
 }

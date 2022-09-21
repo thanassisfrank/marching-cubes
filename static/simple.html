@@ -28,7 +28,7 @@
             // argument is the key of the dataset
             var data = await dataManager.getDataObj("engine");
             // create a new object to march the data object
-            var marcher = marcherManager.create(data);
+            var marcher = await marcherManager.create(data);
 
             // sets the result from marching to always be stored in the marcher's mesh object
             marcher.setMarchIntoMesh(true);
