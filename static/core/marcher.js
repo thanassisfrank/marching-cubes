@@ -83,8 +83,7 @@ var marcherManager = {
                     this.pieces.push(await marcherManager.create(data.pieces[i]));
                     marcherManager.addUser(this.pieces[i]);
                 }
-            } else {
-                if (!data.complex) return;
+            } else if (data.complex) {
 
                 // storage for the fine data (main storage)
                 this.fineData;
@@ -96,36 +95,20 @@ var marcherManager = {
                 console.log(this.blockVol)
                 this.activeBlocks; // temp storage for pulling the immediately needed blocks through from server
                 this.blockLocations;  // a directory of the blocks loaded into the marcher's store
-                this.loadedRange = [data.limits[0]-1, data.limits[0]-1];
                 this.emptyLocations = []; // list of all locations currently unoccupied or holding redundant data
 
                 this.firstTime = true;
-
                 
                 // holds the data for marching the fine blocks
                 this.marchData = {};
 
                 // setup the fine marching for complex datasets
                 await setupMarchFine(this);
-                this.marchData.loadedRange = this.loadedRange;
+                this.marchData.loadedRange = [data.limits[0]-1, data.limits[0]-1];;
                 // the maximum number of blocks that can be loaded here
                 const maxBytesPerBlock = Math.max(data.bytesPerBlockData(), data.bytesPerBlockPoints())
-                this.blocksBudget = Math.min(Math.floor(marcherManager.storageBudget/maxBytesPerBlock), volume(data.blocksSize)*1.1);
-                // this.marchData.blocksBudget = Math.min(Math.floor(maxBufferSize/maxBytesPerBlock), volume(data.blocksSize))/2;
-                this.marchData.blocksBudget = Math.min(1048576, volume(data.blocksSize))/2;
+                this.marchData.blocksBudget = Math.min(1048576, volume(data.blocksSize));
                 console.log("march module budget:", this.marchData.blocksBudget);
-
-                const maxFinePoints = marcherManager.storageBudget/this.dataType.BYTES_PER_ELEMENT
-                this.fineData = new this.dataType(Math.min(maxFinePoints, data.fullVolume));
-                console.log(maxFinePoints, data.fullVolume);
-
-                console.log(this.fineData.length);
-                this.emptyLocations = [];
-                for (let i = 0; i < Math.floor(this.fineData.length/this.blockVol); i++) {
-                    this.emptyLocations.push(i);
-                }
-                this.blockLocations = new Int32Array(volume(data.blocksSize));
-                this.blockLocations.fill(-1);
             }
             this.setupComplete = true;
         }
@@ -144,20 +127,6 @@ var marcherManager = {
                 this.busy = false;
             }
         }
-        this.valueInMarchModule = function(val) {
-            if (this.marchData.loadedRange) {
-                if (val >= this.marchData.loadedRange[0] && val <= this.marchData.loadedRange[1]) {
-                    return true;
-                }
-            }
-            return false;
-        }
-        this.valueLoadedHere = function(val) {
-            if (val >= this.marchData.loadedRange[0] && val <= this.loadedRange[1]) {
-                return true;
-            }
-            return false;
-        }
         // a fine marching pass will use the fine data that it manages
         this.marchFine = async function(threshold) {
             console.log(this.setupComplete, this.data.initialised, this.busy);
@@ -169,16 +138,14 @@ var marcherManager = {
                             this.pieces[i].marchFine(threshold);
                         }
                     } else {
-                        // get the block numbers that are active
-                        this.activeBlocks = this.data.queryBlocks([threshold, threshold]);
-                        // console.log(this.activeBlocks.length);
                         // transfer the active blocks # to the march module
-                        await updateActiveBlocks(this);
+                        console.log(threshold)
+                        await updateActiveBlocks(this, this.data.queryBlocks([threshold, threshold]));
 
                         const [newMarchDataRange, newMarchBlocksCount] = this.expandRangeToFill(
                             this.data, 
                             this.marchData.blocksBudget, 
-                            this.activeBlocks.length, 
+                            this.marchData.activeBlocksCount, 
                             [threshold, threshold]
                         )
 
@@ -309,68 +276,6 @@ var marcherManager = {
 
             return [newLimits, newBlocksCount];
         }
-        // takes lists of block ids to add/remove and alters finedata to match
-        this.updateFineData = async function(addBlockIDs, removeBlockIDs) {
-            // var inBoth = 0;
-            // for (let i = 0; i < addBlockIDs.length; i++) {
-            //     for (let j = 0; j < removeBlockIDs.length; j++) {
-            //         if (addBlockIDs[i] == removeBlockIDs[j]) inBoth++;
-            //     }
-            // }
-            // console.log(inBoth, "in both");
-            console.log(addBlockIDs.length, "blocks to home");
-            console.log(removeBlockIDs.length, "blocks to remove");
-            console.log(this.emptyLocations.length, "empty locations at start");
-            var removed = 0;
-            var added = 0;
-            //fetch new block data
-            var newBlockData =  await this.data.fetchBlocks(addBlockIDs);
-            // replace the blocks now
-            for (let i = 0; i < removeBlockIDs.length; i++) {
-                const oldBlockLoc = this.blockLocations[removeBlockIDs[i]];
-                // if this block is not actually stored, skip removing it
-                if (this.blockLocations[removeBlockIDs[i]] == -1) continue
-
-                // show that this removed block is no longer stored here
-                this.blockLocations[removeBlockIDs[i]] = -1;
-
-                if (i < addBlockIDs.length) {
-                    // can replace this old block with a new one
-                    // overwrite with new block
-                    for (let j = 0; j < this.blockVol; j++) {
-                        const blockData = newBlockData.slice(i*this.blockVol, (i+1)*this.blockVol);
-                        this.fineData.set(blockData, oldBlockLoc*this.blockVol);
-                    }
-                    this.blockLocations[addBlockIDs[i]] = oldBlockLoc;
-                    added++;
-                } else {
-                    this.emptyLocations.push(this.blockLocations[removeBlockIDs[i]]);
-                }
-                removed++;
-            }
-            
-            // console.log(newBlockData);
-            // add any extra new blocks
-            for (let i = added; i < addBlockIDs.length; i++) {
-                if (this.emptyLocations.length > 0) {
-                    const newBlockLoc = this.emptyLocations.pop();
-                    for (let j = 0; j < this.blockVol; j++) {
-                        this.fineData[newBlockLoc*this.blockVol + j] = newBlockData[i*this.blockVol + j];
-                        this.blockLocations[addBlockIDs[i]] = newBlockLoc;
-                    }
-                    added++;
-                } else {
-                    console.log(addBlockIDs.length - i, "blocks not homed");
-                    break;
-                }
-            }
-            // console.log(this.blockVol);
-            // console.log(this.fineData);
-            // console.log(this.blockLocations);
-            console.log(added, "blocks added");
-            console.log(removed, "blocks removed");
-            console.log(this.emptyLocations.length, "empty locations at end");
-        }
         // returns the data corresponding to the blocks input in same order as input
         this.getFineData = function(blocks) {
             var out = new this.fineData.constructor(blocks.length*this.blockVol);
@@ -458,7 +363,6 @@ var marcherManager = {
                 this.mesh.forceCPUSide = bool;
             }
         }
-
         this.delete = function() {
             meshManager.removeUser(this.mesh);
             dataManager.removeUser(this.data);

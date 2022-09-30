@@ -106,7 +106,7 @@ def create_blocks_file(data, size, blocks, stride, name):
     print("blocks file generation complete")
 
 
-def create_limits_file(data, size, name):
+def create_limits_file(data, size, name, get_limits=False):
     blocks = {
         "x": size["x"]//blockSize["x"],
         "y": size["y"]//blockSize["y"],
@@ -157,22 +157,24 @@ def create_limits_file(data, size, name):
 
     # get overall limits for file
     overall_limits = [None, None]
-    for i in range(blocks["x"] * blocks["y"] * blocks["z"]):
-        low = output[i][0]
-        high = output[i][1]
-        if overall_limits[0] is None or low < overall_limits[0]:
-            overall_limits[0] = low
-        if overall_limits[1] is None or high > overall_limits[1]:
-            overall_limits[1] = high
+    if get_limits:
+        for i in range(blocks["x"] * blocks["y"] * blocks["z"]):
+            low = output[i][0]
+            high = output[i][1]
+            if overall_limits[0] is None or low < overall_limits[0]:
+                overall_limits[0] = low
+            if overall_limits[1] is None or high > overall_limits[1]:
+                overall_limits[1] = high
 
-    print("low limit:", overall_limits[0])
-    print("high limit:", overall_limits[1])
+        print("low limit:", overall_limits[0])
+        print("high limit:", overall_limits[1])
 
     # save to binary file
     with open(name, "wb") as file:
         file.write(output.data)
 
     print("limits file generation successful")
+    return overall_limits
 
 
 def create_raw_file(data, name):
@@ -209,20 +211,22 @@ def process_raw_file(data_info):
 
     create_blocks_file(data, size, blocks, 1, "static/" + path + "_blocks" + "." + ext)
     
-    create_limits_file(data, size, "static/" + path + "_limits" + "." + ext)
+    limits = create_limits_file(data, size, "static/" + path + "_limits" + "." + ext, get_limits=True)
 
-    # update the json file
+    data_info["limits"] = [float(x) for x in limits]
 
     # set the origin
     if "cellSize" in data_info:
         cell_size = data_info["cellSize"]
     else:
         cell_size = [1, 1, 1]
+        
     data_info["origin"] = [
         (size["x"]-1)/2*cell_size["x"], 
         (size["y"]-1)/2*cell_size["y"], 
         (size["z"]-1)/2*cell_size["z"]
     ]
+    data_info["complexAvailable"] = True
 
     return data_info
 
@@ -351,6 +355,7 @@ def main(data_name):
     else:
         print("unsupported file type")
     if new_data_info is not None:
+        print(new_data_info)
         # write updated entry into config file
         with open("static/data/datasets.json", "w") as file:
             file.write(json.dumps(datasets, indent="\t"))

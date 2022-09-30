@@ -55,16 +55,16 @@
 		"name": "silicium",
 		"path": "data/silicium_98x34x34_uint8.raw",
 		"type": "raw",
-		"complexAvailable": false,
+		"complexAvailable": true,
 		"size": {
 			"x": 34,
 			"y": 34,
 			"z": 98
 		},
 		"blocksSize": {
-			"x": 8,
-			"y": 8,
-			"z": 24
+			"x": 9,
+			"y": 9,
+			"z": 25
 		},
 		"cellSize": {
 			"x": 1,
@@ -72,10 +72,15 @@
 			"z": 1
 		},
 		"limits": [
-			0,
-			255
+			0.0,
+			255.0
 		],
-		"dataType": "uint8"
+		"dataType": "uint8",
+		"origin": [
+			16.5,
+			16.5,
+			48.5
+		]
 	},
 	"simple": {
 		"name": "simple",
@@ -199,6 +204,10 @@
 			"y": 75,
 			"z": 75
 		},
+		"limits": [
+			0,
+			255
+		],
 		"dataType": "uint8"
 	},
 	"pancreas": {

@@ -29,12 +29,10 @@ function Buffer(marchData, dataType, length) {
         this.location = location;
         this.allocated = true;
     }
-    // set data into it
-    this.set = function(data, offset = 0) {
+    // write data into it
+    this.write = function(data, offset = 0) {
         const dataArray = new this.dataType(marchData.memory.buffer, this.location + offset * this.dataType.BYTES_PER_ELEMENT, data.length);
         dataArray.set(data);
-        // console.log(data.length);
-        // console.log(dataArray);
     }
     // read data out of it
     this.read = function(offset = 0, length = this.elementsLength) {
@@ -120,13 +118,13 @@ async function setupData(dataObj) {
         
         dataObj.marchData.buffers.data = new Buffer(dataObj.marchData, Float32Array, dataObj.volume);
         dataObj.marchData.buffers.data.allocate();
-        dataObj.marchData.buffers.data.set(dataObj.data);
+        dataObj.marchData.buffers.data.write(dataObj.data);
 
 
         if (dataObj.structuredGrid) {
             dataObj.marchData.buffers.points = new Buffer(dataObj.marchData, Float32Array, dataObj.volume*3);
             dataObj.marchData.buffers.points.allocate();
-            dataObj.marchData.buffers.points.set(dataObj.points);
+            dataObj.marchData.buffers.points.write(dataObj.points);
         }
     };
 }
@@ -180,13 +178,14 @@ var generateMeshWasm = function(dataObj, meshObj, threshold) {
     indBuffer.free();
 }
 
-function updateActiveBlocks(dataObj) {
+function updateActiveBlocks(dataObj, activeBlocks) {
+    dataObj.marchData.activeBlocksCount = activeBlocks.length;
     console.log("updating active");
     dataObj.marchData.buffers.activeBlocks?.free();
 
-    var activeBuff = new Buffer(dataObj.marchData, Uint32Array, dataObj.activeBlocks.length);
+    var activeBuff = new Buffer(dataObj.marchData, Uint32Array, activeBlocks.length);
     activeBuff.allocate();
-    activeBuff.set(dataObj.activeBlocks);
+    activeBuff.write(activeBlocks);
 
     dataObj.marchData.buffers.activeBlocks = activeBuff;
     console.log("updated active");
@@ -214,7 +213,7 @@ function updateMarchFineData(dataObj, addBlockIDs, removeBlockIDs, newBlockData,
         if (oldBlockLoc == -1) continue
 
         // show that this removed block is no longer stored here
-        blockLocations.set([-1], removeBlockIDs[i]);
+        blockLocations.write([-1], removeBlockIDs[i]);
 
         if (i < addBlockIDs.length) {
             // can replace this old block with a new one
@@ -222,14 +221,14 @@ function updateMarchFineData(dataObj, addBlockIDs, removeBlockIDs, newBlockData,
             for (let j = 0; j < dataObj.blockVol; j++) {
 
                 const blockData = newBlockData.slice(i*dataObj.blockVol, (i+1)*dataObj.blockVol);
-                fineData.set(blockData, oldBlockLoc*dataObj.blockVol);
+                fineData.write(blockData, oldBlockLoc*dataObj.blockVol);
 
                 if (dataObj.structuredGrid) {
                     const blockPoints = newPoints.slice(3*i*dataObj.blockVol, 3*(i+1)*dataObj.blockVol);
-                    finePoints.set(blockPoints, 3*oldBlockLoc*dataObj.blockVol);
+                    finePoints.write(blockPoints, 3*oldBlockLoc*dataObj.blockVol);
                 }
             }
-            blockLocations.set([oldBlockLoc], addBlockIDs[i]);
+            blockLocations.write([oldBlockLoc], addBlockIDs[i]);
             added++;
         } else {
             locationsOccupied[oldBlockLoc] = 0;
@@ -255,14 +254,14 @@ function updateMarchFineData(dataObj, addBlockIDs, removeBlockIDs, newBlockData,
             const newBlockLoc = checkIndex;
 
             const blockData = newBlockData.slice(i*dataObj.blockVol, (i+1)*dataObj.blockVol);
-            fineData.set(blockData, newBlockLoc*dataObj.blockVol);
+            fineData.write(blockData, newBlockLoc*dataObj.blockVol);
 
             if (dataObj.structuredGrid) {
                 const blockPoints = newPoints.slice(3*i*dataObj.blockVol, 3*(i+1)*dataObj.blockVol);
-                finePoints.set(blockPoints, 3*newBlockLoc*dataObj.blockVol);
+                finePoints.write(blockPoints, 3*newBlockLoc*dataObj.blockVol);
             }
 
-            blockLocations.set([newBlockLoc], addBlockIDs[i]);
+            blockLocations.write([newBlockLoc], addBlockIDs[i]);
             locationsOccupied[newBlockLoc] = 1;
             added++;
         } else {

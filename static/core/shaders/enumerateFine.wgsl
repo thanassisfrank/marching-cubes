@@ -52,9 +52,6 @@ struct I32Buffer {
 var<workgroup> localVertOffsets : array<u32, {{WGVol}}>;
 var<workgroup> localIndexOffsets : array<u32, {{WGVol}}>;
 
-// holds dimensions of WG
-var<workgroup> WGSize : vec3<u32>;
-var<workgroup> WGVol : u32;
 // holds index (1d) of current WG
 var<workgroup> WGIndex : u32;
 
@@ -87,7 +84,7 @@ fn unpack(val: u32, i : u32, packing : u32) -> f32{
 
 // different from other getVal as x, y, z are local to block and uses
 // the number of the current wg(block) too
-fn getVal(x : u32, y : u32, z : u32, blockIndex : u32, packing : u32) -> f32 {
+fn getVal(x : u32, y : u32, z : u32, WGSize : vec3<u32>, blockIndex : u32, packing : u32) -> f32 {
     // linear index of texel
     var i = blockIndex * {{WGVol}}u + getIndex(x, y, z, WGSize);
     var coords = vec3<i32>(posFromIndex(i, vec3<u32>(textureDimensions(data, 0).zyx)).zyx);
@@ -160,9 +157,10 @@ fn main(
     @builtin(local_invocation_index) localIndex : u32, 
     @builtin(workgroup_id) WGId : vec3<u32>
 ) {
+    var WGSize = vec3<u32>({{WGSizeX}}u, {{WGSizeY}}u, {{WGSizeZ}}u);
+    var WGVol = {{WGVol}}u;
     if (all(lid == vec3<u32>(0u))) {
-        WGSize = vec3<u32>({{WGSizeX}}u, {{WGSizeY}}u, {{WGSizeZ}}u);
-        WGVol = {{WGVol}}u;
+        
         cellsSize = WGSize - vec3<u32>(1u);
         // max workgroups per dimension is 65535 so need to wrap 3d
         // coords to 1d if there is more than that
@@ -180,7 +178,7 @@ fn main(
     var globalPointPos = thisBlockPos*WGSize + lid;
 
     // first load all the required data into workgroup memory ==============================================
-    var val = getVal(lid.x, lid.y, lid.z, thisBlockLoc, packing);
+    var val = getVal(lid.x, lid.y, lid.z, WGSize, thisBlockLoc, packing);
     blockData[lid.x][lid.y][lid.z] = val;
     
     // a vector that describes on what sides this thread has neighbouring blocks (if they exist)
@@ -256,7 +254,7 @@ fn main(
                     var neighbourIndex = u32(locations.buffer[thisIndex + getIndexV(neighbourConfigs[i], dataInfo.blocksSize)]);
                     var src = lid*(vec3<u32>(1u) - neighbourConfigs[i]);
                     var dst = lid + neighbourConfigs[i];
-                    blockData[dst.x][dst.y][dst.z] = getVal(src.x, src.y, src.z, neighbourIndex, packing);
+                    blockData[dst.x][dst.y][dst.z] = getVal(src.x, src.y, src.z, WGSize, neighbourIndex, packing);
                 }
             }
             continuing{i=i+1u;}

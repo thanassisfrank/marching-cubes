@@ -294,7 +294,7 @@ var dataManager = {
                 this.data = new DATA_TYPES[config.dataType](responseBuffer);
                 this.limits = config.limits;
                 this.initialise(config);
-                // this.initialise(...xyzToA(config.size), ...xyzToA(config.cellSize));
+                console.log("init")
             } else if (config.type == "structuredGrid") {
                 this.structuredGrid = true;
 

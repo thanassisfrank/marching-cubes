@@ -1145,12 +1145,6 @@ int EMSCRIPTEN_KEEPALIVE generateMeshFine(
                         code |= (val > threshold) << l;
                     }
 
-                    // if (code != 0 && code != 255) {
-                    //     console_log_int(code);
-                    // }
-
-
-
                     // and how many indices and vertices it will generate, adding to totals
                     for (int l = 0; l < 12; l++) {
                         if (edgeTable[code][l] != -1) {

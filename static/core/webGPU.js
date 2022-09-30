@@ -931,7 +931,7 @@ function createGlobalBindGroups() {
 
 function createBindGroupLayouts() {
     marchData.bindGroupLayouts.enumerate = [
-        generateBGLayout("cbr ctn3df csn cbr", "enum0"), // generateBGLayout("cbr cbr"),
+        generateBGLayout("cbr ctn3df cbr", "enum0"),
         generateBGLayout("cbs", "enum1"),
         generateBGLayout("cbs cbs", "enum2"),
         generateBGLayout("cbs cbs", "enum3")
@@ -949,7 +949,7 @@ function createBindGroupLayouts() {
     ];
 
     marchData.bindGroupLayouts.march = [
-        generateBGLayout("cbr ctn3df csn cbr", "march0"), // generateBGLayout("cbr cbr"),
+        generateBGLayout("cbr ctn3df cbr", "march0"),
         generateBGLayout("cbs", "march1"),
         generateBGLayout("cw3dr32float cw3dr32float cw3dr32uint", "march2"),
         generateBGLayout("cbs cbs", "march3")
@@ -1275,11 +1275,6 @@ function createBindGroups(dataObj) {
                 textureSize
             )
         }   
-        
-        
-
-        // create the sampler
-        dataObj.marchData.samplers.data = device.createSampler();
     }
 
     // copy over table buffer
@@ -1367,34 +1362,15 @@ function createBindGroups(dataObj) {
         });
 
     }
-
-    dataObj.marchData.bindGroups.constants = device.createBindGroup({
-        layout: dataObj.marchData.pipelines.enumerate.getBindGroupLayout(0),
-        entries: [
-            {
-                binding: 0,
-                resource: {
-                    buffer: dataObj.marchData.buffers.dataInfo
-                }
-            },
-            {
-                binding: 1,
-                resource: dataObj.marchData.textures.data.createView()
-            },
-            {
-                binding: 2,
-                resource: dataObj.marchData.samplers.data
-            },
-            {
-                binding: 3,
-                resource: {
-                    buffer: dataObj.marchData.buffers.tables
-                }
-            }
-        ]
-    });  
-    
-
+    dataObj.marchData.bindGroups.constants = generateBG(
+        dataObj.marchData.pipelines.enumerate.getBindGroupLayout(0),
+        [
+            dataObj.marchData.buffers.dataInfo,
+            dataObj.marchData.textures.data.createView(),
+            dataObj.marchData.buffers.tables
+        ],
+        dataObj.id + ": constants"
+    )
     createOffsetBindGroups(dataObj);
 }
 
@@ -1522,6 +1498,8 @@ function createOffsetBindGroups(dataObj) {
 }
 
 async function getMarchCounts(dataObj, threshold) {
+    var passEncoder;
+
     const WGCount = dataObj.marchData.WGCount;
     //console.log(WGCount);
     //const buffers 
@@ -1540,15 +1518,15 @@ async function getMarchCounts(dataObj, threshold) {
     device.queue.writeBuffer(dataObj.marchData.buffers.indexOffset, 0, new Float32Array(Math.ceil(WGCount.val/(WGPrefixSumCount*2)) * WGPrefixSumCount * 2));
 
     await commandEncoder;
-    var passEncoder1 = commandEncoder.beginComputePass();
+    passEncoder = commandEncoder.beginComputePass();
     
-    passEncoder1.setPipeline(dataObj.marchData.pipelines.enumerate);
-    passEncoder1.setBindGroup(0, dataObj.marchData.bindGroups.constants);
-    passEncoder1.setBindGroup(1, dataObj.marchData.bindGroups.marchVars);
-    passEncoder1.setBindGroup(2, dataObj.marchData.bindGroups.vertexOffset);
-    passEncoder1.setBindGroup(3, dataObj.marchData.bindGroups.indexOffset);
-    passEncoder1.dispatchWorkgroups(WGCount.x, WGCount.y, WGCount.z);
-    passEncoder1.end();
+    passEncoder.setPipeline(dataObj.marchData.pipelines.enumerate);
+    passEncoder.setBindGroup(0, dataObj.marchData.bindGroups.constants);
+    passEncoder.setBindGroup(1, dataObj.marchData.bindGroups.marchVars);
+    passEncoder.setBindGroup(2, dataObj.marchData.bindGroups.vertexOffset);
+    passEncoder.setBindGroup(3, dataObj.marchData.bindGroups.indexOffset);
+    passEncoder.dispatchWorkgroups(WGCount.x, WGCount.y, WGCount.z);
+    passEncoder.end();
 
     device.queue.submit([commandEncoder.finish()])    
 
@@ -1585,21 +1563,21 @@ async function getMarchCounts(dataObj, threshold) {
         
         
         // prefix sum on verts
-        var passEncoder2 = commandEncoder.beginComputePass();
-        passEncoder2.setPipeline(marchData.pipelines.prefix[0]);
-        passEncoder2.setBindGroup(0, dataObj.marchData.bindGroups.vertexOffset);
-        passEncoder2.setBindGroup(1, dataObj.marchData.bindGroups.bufferOffset);
-        passEncoder2.dispatchWorkgroups(thisNumBlocks);
-        passEncoder2.end();
+        passEncoder = commandEncoder.beginComputePass();
+        passEncoder.setPipeline(marchData.pipelines.prefix[0]);
+        passEncoder.setBindGroup(0, dataObj.marchData.bindGroups.vertexOffset);
+        passEncoder.setBindGroup(1, dataObj.marchData.bindGroups.bufferOffset);
+        passEncoder.dispatchWorkgroups(thisNumBlocks);
+        passEncoder.end();
 
         // prefix sum on indices
-        var passEncoder3 = commandEncoder.beginComputePass();
-        passEncoder3.setPipeline(marchData.pipelines.prefix[0]);
-        passEncoder3.setBindGroup(0, dataObj.marchData.bindGroups.indexOffset);
-        passEncoder3.setBindGroup(1, dataObj.marchData.bindGroups.bufferOffset);
+        passEncoder = commandEncoder.beginComputePass();
+        passEncoder.setPipeline(marchData.pipelines.prefix[0]);
+        passEncoder.setBindGroup(0, dataObj.marchData.bindGroups.indexOffset);
+        passEncoder.setBindGroup(1, dataObj.marchData.bindGroups.bufferOffset);
 
-        passEncoder3.dispatchWorkgroups(thisNumBlocks);
-        passEncoder3.end();
+        passEncoder.dispatchWorkgroups(thisNumBlocks);
+        passEncoder.end();
 
         //commandEncoder.copyBufferToBuffer(vertexOffsetBuffer, 256*4*128*2, readBuffer, 0, 4*elems);
 
@@ -1610,21 +1588,21 @@ async function getMarchCounts(dataObj, threshold) {
         //device.queue.submit([commandEncoder.finish()])
         
         if (numBlocks > 0) {
-            var passEncoder4 = commandEncoder.beginComputePass();
-            passEncoder4.setPipeline(marchData.pipelines.prefix[1]);
-            passEncoder4.setBindGroup(0, dataObj.marchData.bindGroups.vertexOffset);
-            passEncoder4.setBindGroup(1, dataObj.marchData.bindGroups.bufferOffset);
+            passEncoder = commandEncoder.beginComputePass();
+            passEncoder.setPipeline(marchData.pipelines.prefix[1]);
+            passEncoder.setBindGroup(0, dataObj.marchData.bindGroups.vertexOffset);
+            passEncoder.setBindGroup(1, dataObj.marchData.bindGroups.bufferOffset);
 
-            passEncoder4.dispatchWorkgroups(1);
-            passEncoder4.end();
+            passEncoder.dispatchWorkgroups(1);
+            passEncoder.end();
             // for indices
-            var passEncoder5 = commandEncoder.beginComputePass();
-            passEncoder5.setPipeline(marchData.pipelines.prefix[1]);
-            passEncoder5.setBindGroup(0, dataObj.marchData.bindGroups.indexOffset);
-            passEncoder5.setBindGroup(1, dataObj.marchData.bindGroups.bufferOffset);
+            passEncoder = commandEncoder.beginComputePass();
+            passEncoder.setPipeline(marchData.pipelines.prefix[1]);
+            passEncoder.setBindGroup(0, dataObj.marchData.bindGroups.indexOffset);
+            passEncoder.setBindGroup(1, dataObj.marchData.bindGroups.bufferOffset);
 
-            passEncoder5.dispatchWorkgroups(1);
-            passEncoder5.end();
+            passEncoder.dispatchWorkgroups(1);
+            passEncoder.end();
         }
 
         //await device.queue.onSubmittedWorkDone();
@@ -1806,6 +1784,8 @@ async function copyBuffersToCPUSide(meshObj) {
 
 async function march(dataObj, meshObj, threshold) {
     
+    var passEncoder;
+
     // enumeration pass =====================================================================
     // finds the correct resolution to generate the mesh at and creates a per-WG offset buffer for
     // verts and indices
@@ -1889,20 +1869,20 @@ async function march(dataObj, meshObj, threshold) {
     //device.queue.writeBuffer(marchVarsBuffer, 0, new Float32Array([threshold, 0, 0]));
 
     await commandEncoder;
-    var passEncoder6 = commandEncoder.beginComputePass();
-    passEncoder6.setPipeline(dataObj.marchData.pipelines.march);
+    passEncoder = commandEncoder.beginComputePass();
+    passEncoder.setPipeline(dataObj.marchData.pipelines.march);
 
-    passEncoder6.setBindGroup(0, dataObj.marchData.bindGroups.constants);
-    passEncoder6.setBindGroup(1, dataObj.marchData.bindGroups.marchVars);
-    passEncoder6.setBindGroup(2, marchOutBindGroup);
-    passEncoder6.setBindGroup(3, dataObj.marchData.bindGroups.combinedOffset);
-    passEncoder6.dispatchWorkgroups(
+    passEncoder.setBindGroup(0, dataObj.marchData.bindGroups.constants);
+    passEncoder.setBindGroup(1, dataObj.marchData.bindGroups.marchVars);
+    passEncoder.setBindGroup(2, marchOutBindGroup);
+    passEncoder.setBindGroup(3, dataObj.marchData.bindGroups.combinedOffset);
+    passEncoder.dispatchWorkgroups(
         Math.ceil(dataObj.size[0]/WGSize.x),
         Math.ceil(dataObj.size[1]/WGSize.y),
         Math.ceil(dataObj.size[2]/WGSize.z)
     );
 
-    passEncoder6.end();
+    passEncoder.end();
 
     device.queue.submit([commandEncoder.finish()]);
     
@@ -1914,7 +1894,8 @@ async function march(dataObj, meshObj, threshold) {
 }
 
 
-async function updateActiveBlocks(dataObj) {
+async function updateActiveBlocks(dataObj, activeBlocks) {
+    dataObj.marchData.activeBlocksCount = activeBlocks.length;
 
     dataObj.marchData.buffers.activeBlocks?.destroy();
     dataObj.marchData.buffers.vertexOffsetFine?.destroy();
@@ -1922,21 +1903,21 @@ async function updateActiveBlocks(dataObj) {
 
     var activeBlocksBuffer = device.createBuffer({
         label: dataObj.id + ": active blocks buffer",
-        size: 4*Math.ceil(dataObj.activeBlocks.length/4)*4,
+        size: 4*Math.ceil(activeBlocks.length/4)*4,
         usage: GPUBufferUsage.STORAGE,
         mappedAtCreation: true
     }); 
 
-    new Uint32Array(activeBlocksBuffer.getMappedRange(), 0, dataObj.activeBlocks.length).set(dataObj.activeBlocks);
+    new Uint32Array(activeBlocksBuffer.getMappedRange(), 0, activeBlocks.length).set(activeBlocks);
     activeBlocksBuffer.unmap();
 
     dataObj.marchData.buffers.activeBlocks = activeBlocksBuffer;
 
-    console.log("active blocks:", dataObj.activeBlocks.length);
+    console.log("active blocks:", activeBlocks.length);
 
     // create offset buffers
     {
-        const offsetBufferLength = Math.ceil(dataObj.activeBlocks.length/(WGPrefixSumCount*2)) * WGPrefixSumCount*2;
+        const offsetBufferLength = Math.ceil(activeBlocks.length/(WGPrefixSumCount*2)) * WGPrefixSumCount*2;
         
         var vertexOffsetBuffer = device.createBuffer({
             label: dataObj.id + ": fine vert offset buffer",
@@ -2204,7 +2185,9 @@ async function updateMarchFineData(dataObj, addBlocks, removeBlocks, fineData, f
 }
 
 async function marchFine(dataObj, meshObj, threshold) {
-    if (dataObj.fineData.length == 0) return;
+    // if (dataObj.fineData.length == 0) return;
+    
+    var passEncoder;
 
     // make the bindgroup for the data
     dataObj.marchData.bindGroups.dataFine = generateBG(
@@ -2224,7 +2207,7 @@ async function marchFine(dataObj, meshObj, threshold) {
     device.queue.writeBuffer(dataObj.marchData.buffers.dataInfoFine, 0, new Float32Array([threshold]));
 
     const maxWG = device.limits.maxComputeWorkgroupsPerDimension;
-    var totalBlocks = dataObj.activeBlocks.length;
+    var totalBlocks = dataObj.marchData.activeBlocksCount;
     var thisNumBlocks;
     var blockOffset = 0;
 
@@ -2233,7 +2216,7 @@ async function marchFine(dataObj, meshObj, threshold) {
         device.queue.writeBuffer(dataObj.marchData.buffers.dataInfoFine, 4, new Uint32Array([blockOffset]));
         thisNumBlocks =  Math.min(maxWG, totalBlocks-blockOffset);
 
-        var passEncoder = commandEncoder.beginComputePass();
+        passEncoder = commandEncoder.beginComputePass();
     
         passEncoder.setPipeline(dataObj.marchData.pipelines.enumerateFine);
         passEncoder.setBindGroup(0, marchData.bindGroups.tables);
@@ -2254,7 +2237,7 @@ async function marchFine(dataObj, meshObj, threshold) {
     
     // prefix sum on verts
     // starts as total number of values in totals
-    const numBlocks = Math.ceil(dataObj.activeBlocks.length/(WGPrefixSumCount*2));
+    const numBlocks = Math.ceil(dataObj.marchData.activeBlocksCount/(WGPrefixSumCount*2));
     var thisNumBlocks
     var OffsetIntoOffsetBuffer = 0;
     
@@ -2280,38 +2263,38 @@ async function marchFine(dataObj, meshObj, threshold) {
         
         
         // prefix sum on verts
-        var passEncoder2 = commandEncoder.beginComputePass();
-        passEncoder2.setPipeline(marchData.pipelines.prefix[0]);
-        passEncoder2.setBindGroup(0, dataObj.marchData.bindGroups.vertexOffsetFine);
-        passEncoder2.setBindGroup(1, dataObj.marchData.bindGroups.bufferOffset);
-        passEncoder2.dispatchWorkgroups(thisNumBlocks);
-        passEncoder2.end();
+        passEncoder = commandEncoder.beginComputePass();
+        passEncoder.setPipeline(marchData.pipelines.prefix[0]);
+        passEncoder.setBindGroup(0, dataObj.marchData.bindGroups.vertexOffsetFine);
+        passEncoder.setBindGroup(1, dataObj.marchData.bindGroups.bufferOffset);
+        passEncoder.dispatchWorkgroups(thisNumBlocks);
+        passEncoder.end();
 
         // prefix sum on indices
-        var passEncoder3 = commandEncoder.beginComputePass();
-        passEncoder3.setPipeline(marchData.pipelines.prefix[0]);
-        passEncoder3.setBindGroup(0, dataObj.marchData.bindGroups.indexOffsetFine);
-        passEncoder3.setBindGroup(1, dataObj.marchData.bindGroups.bufferOffset);
+        passEncoder = commandEncoder.beginComputePass();
+        passEncoder.setPipeline(marchData.pipelines.prefix[0]);
+        passEncoder.setBindGroup(0, dataObj.marchData.bindGroups.indexOffsetFine);
+        passEncoder.setBindGroup(1, dataObj.marchData.bindGroups.bufferOffset);
 
-        passEncoder3.dispatchWorkgroups(thisNumBlocks);
-        passEncoder3.end();
+        passEncoder.dispatchWorkgroups(thisNumBlocks);
+        passEncoder.end();
         
         if (numBlocks > 0) {
-            var passEncoder4 = commandEncoder.beginComputePass();
-            passEncoder4.setPipeline(marchData.pipelines.prefix[1]);
-            passEncoder4.setBindGroup(0, dataObj.marchData.bindGroups.vertexOffsetFine);
-            passEncoder4.setBindGroup(1, dataObj.marchData.bindGroups.bufferOffset);
+            passEncoder = commandEncoder.beginComputePass();
+            passEncoder.setPipeline(marchData.pipelines.prefix[1]);
+            passEncoder.setBindGroup(0, dataObj.marchData.bindGroups.vertexOffsetFine);
+            passEncoder.setBindGroup(1, dataObj.marchData.bindGroups.bufferOffset);
 
-            passEncoder4.dispatchWorkgroups(1);
-            passEncoder4.end();
+            passEncoder.dispatchWorkgroups(1);
+            passEncoder.end();
             // for indices
-            var passEncoder5 = commandEncoder.beginComputePass();
-            passEncoder5.setPipeline(marchData.pipelines.prefix[1]);
-            passEncoder5.setBindGroup(0, dataObj.marchData.bindGroups.indexOffsetFine);
-            passEncoder5.setBindGroup(1, dataObj.marchData.bindGroups.bufferOffset);
+            passEncoder = commandEncoder.beginComputePass();
+            passEncoder.setPipeline(marchData.pipelines.prefix[1]);
+            passEncoder.setBindGroup(0, dataObj.marchData.bindGroups.indexOffsetFine);
+            passEncoder.setBindGroup(1, dataObj.marchData.bindGroups.bufferOffset);
 
-            passEncoder5.dispatchWorkgroups(1);
-            passEncoder5.end();
+            passEncoder.dispatchWorkgroups(1);
+            passEncoder.end();
         }
 
         //await device.queue.onSubmittedWorkDone();
@@ -2366,7 +2349,7 @@ async function marchFine(dataObj, meshObj, threshold) {
     
     
 
-    totalBlocks = dataObj.activeBlocks.length;
+    totalBlocks = dataObj.marchData.activeBlocksCount;
     blockOffset = 0;
 
     for (let i = 0; i < Math.ceil(totalBlocks/maxWG); i++) {
@@ -2376,15 +2359,15 @@ async function marchFine(dataObj, meshObj, threshold) {
 
         var commandEncoder = await device.createCommandEncoder();
 
-        var passEncoder6 = commandEncoder.beginComputePass();
+        passEncoder = commandEncoder.beginComputePass();
         
-        passEncoder6.setPipeline(dataObj.marchData.pipelines.marchFine);
-        passEncoder6.setBindGroup(0, marchData.bindGroups.tables);
-        passEncoder6.setBindGroup(1, dataObj.marchData.bindGroups.dataFine);
-        passEncoder6.setBindGroup(2, marchOutBindGroup);
-        passEncoder6.setBindGroup(3, dataObj.marchData.bindGroups.combinedOffsetFine);
-        passEncoder6.dispatchWorkgroups(thisNumBlocks);
-        passEncoder6.end();
+        passEncoder.setPipeline(dataObj.marchData.pipelines.marchFine);
+        passEncoder.setBindGroup(0, marchData.bindGroups.tables);
+        passEncoder.setBindGroup(1, dataObj.marchData.bindGroups.dataFine);
+        passEncoder.setBindGroup(2, marchOutBindGroup);
+        passEncoder.setBindGroup(3, dataObj.marchData.bindGroups.combinedOffsetFine);
+        passEncoder.dispatchWorkgroups(thisNumBlocks);
+        passEncoder.end();
 
         // commandEncoder.copyBufferToBuffer(marchVertBuffer, 0, marchData.buffers.read, 0, 10*4);
 
@@ -2417,7 +2400,8 @@ async function setupRenderer(canvas) {
     // setup swapchain
     ctx.configure({
         device: device,
-        format: 'bgra8unorm'
+        format: "bgra8unorm",
+        alphaMode: "opaque"
     });
 
     // TODO: seperate pipeline for rendering views and copying to main texture
